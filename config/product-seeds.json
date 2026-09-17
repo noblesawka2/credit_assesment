@@ -1,0 +1,70 @@
+{
+  "products": [
+    {
+      "code": "MARKETLIFT",
+      "name": "MarketLift Daily Trader Loan",
+      "principalMinNaira": 50000,
+      "principalMaxNaira": 150000,
+      "periods": 25,
+      "frequency": "WORKING_DAY",
+      "interest": {"rateBps": 1000, "basis": "FLAT_CYCLE", "treatment": "UPFRONT"},
+      "fees": [
+        {"code": "INSURANCE", "type": "FIXED", "amountNaira": 300, "treatment": "UPFRONT"},
+        {"code": "BOOKLET", "type": "FIXED", "amountNaira": 200, "treatment": "UPFRONT"}
+      ],
+      "compulsorySavings": {"cycleRateBps": 2500, "treatment": "SPREAD"},
+      "repaymentCheck": "daily principal 4% plus daily savings 1% equals total daily collection 5% of principal",
+      "activationNote": "Confirm whether each upfront charge is deducted from proceeds or paid separately before publishing the version."
+    },
+    {
+      "code": "MARKETPOWER",
+      "name": "MarketPower Shop Loan",
+      "principalMinNaira": 200000,
+      "principalMaxNaira": 500000,
+      "cycleOneRangeNaira": [200000, 300000],
+      "cycleTwoRangeNaira": [301000, 500000],
+      "periods": 16,
+      "frequency": "WEEKLY",
+      "tenorMonths": 4,
+      "interest": {"rateBpsPerMonth": 1000, "cycleRateBps": 4000, "basis": "FLAT", "treatment": "SPREAD"},
+      "fees": [
+        {"code": "PROCESSING", "type": "PERCENTAGE", "rateBps": 100, "treatment": "UPFRONT"},
+        {"code": "INSURANCE", "type": "PERCENTAGE", "rateBps": 200, "treatment": "UPFRONT"},
+        {"code": "BOOKLET", "type": "FIXED", "amountNaira": 500, "treatment": "UPFRONT_IF_APPLICABLE"}
+      ],
+      "compulsorySavings": {"cycleRateBps": 1000, "treatment": "SPREAD"},
+      "repaymentCheck": "weekly collection excluding fixed charges equals principal x 150% / 16"
+    },
+    {
+      "code": "EASYPAY",
+      "name": "EasyPay Salary Loan",
+      "periods": 6,
+      "frequency": "MONTHLY",
+      "tenorMonths": 6,
+      "interest": {"rateBpsPerMonth": 600, "cycleRateBps": 3600, "basis": "FLAT", "treatment": "SPREAD"},
+      "fees": [
+        {"code": "PROCESSING", "type": "PERCENTAGE", "rateBps": 250, "treatment": "UPFRONT"},
+        {"code": "INSURANCE", "type": "CONFIGURABLE", "treatment": "UPFRONT"}
+      ],
+      "compulsorySavings": {"cycleRateBps": 0},
+      "maximumTotalDebtServiceRatioBps": 4000,
+      "repaymentCheck": "new monthly principal and interest plus existing monthly debt must remain within the approved 40% verified-net-salary control"
+    },
+    {
+      "code": "UNITY",
+      "name": "Unity Group Loan",
+      "periods": 16,
+      "frequency": "WEEKLY",
+      "tenorMonths": 4,
+      "interest": {"rateBpsPerMonth": 600, "cycleRateBps": 2400, "basis": "FLAT", "treatment": "SPREAD"},
+      "fees": [
+        {"code": "PROCESSING", "type": "PERCENTAGE", "rateBps": 350, "treatment": "SPREAD"},
+        {"code": "INSURANCE", "type": "FIXED", "amountNaira": 2000, "treatment": "SPREAD"}
+      ],
+      "compulsorySavings": {"cycleRateBps": "CONFIGURABLE", "treatment": "SPREAD_IF_ENABLED"},
+      "groupPurse": {"amountNaira": "CONFIGURABLE", "scope": "PER_GROUP_OR_PER_MEMBER_MUST_BE_EXPLICIT"},
+      "collectionChannel": "AUTHORISED_GROUP_LEADER",
+      "missedRepaymentRule": "GROUP_COVER_ACTIVATES_IMMEDIATELY"
+    }
+  ]
+}

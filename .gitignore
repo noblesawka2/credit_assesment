@@ -1,9 +1,11 @@
 node_modules/
 dist/
 .env
+.env.migrate
 .env.*
 !.env.example
 !.env.migrate.example
+certs/
 coverage/
 *.log
 .build/

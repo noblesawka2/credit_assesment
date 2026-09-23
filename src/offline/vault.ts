@@ -23,12 +23,16 @@ export interface DeviceKeyProvider {
   assurance: "APPROVED_DEVICE_BOUND";
   unlock(deviceId: string, userId: string): Promise<CryptoKey>;
 }
+export interface UnlockAttemptStore {
+  reserve(scope: string): Promise<string>;
+  succeeded(scope: string, attemptId: string): Promise<void>;
+}
 export function assertOfflineGrant(actor: Actor, grant: OfflineGrant, now: number) {
   const allowed = ["ASSISTED_INTAKE", "CERTIFIED_FIELD_AGENT", "CREDIT_OFFICER"];
   requireControl(actor.active && !actor.roles.includes("MEMBER") && actor.roles.some(role => allowed.includes(role)) && actor.capabilities.includes("OFFLINE_CAPTURE"), "OFFLINE_FORBIDDEN");
   requireControl(grant.registered && grant.deviceId.length > 0 && grant.userId === actor.id && !grant.revoked, "DEVICE_OR_GRANT_INVALID");
   requireControl(Number.isFinite(now) && now >= grant.issuedAt && now < grant.expiresAt, "OFFLINE_SESSION_EXPIRED");
-  requireControl(grant.failedUnlocks < 5, "OFFLINE_UNLOCK_LOCKED");
+  requireControl(Number.isFinite(grant.issuedAt) && Number.isFinite(grant.expiresAt) && Number.isInteger(grant.failedUnlocks) && grant.failedUnlocks >= 0 && grant.failedUnlocks < 5, "OFFLINE_UNLOCK_LOCKED");
   if (actor.roles.includes("CERTIFIED_FIELD_AGENT")) requireControl(actor.certifiedAgentLevel !== undefined && actor.certifiedAgentLevel >= grant.minimumAgentLevel, "AGENT_NOT_CERTIFIED");
 }
 export function localTransition(current: LocalState, next: LocalState) {
@@ -44,9 +48,11 @@ export class OfflineVault {
   private readonly store: EncryptedStore;
   private readonly provider: DeviceKeyProvider;
   private readonly now: () => number;
-  constructor(actor: Actor, grant: OfflineGrant, store: EncryptedStore, provider: DeviceKeyProvider, now = Date.now) {
+  private readonly attempts: UnlockAttemptStore | undefined;
+  constructor(actor: Actor, grant: OfflineGrant, store: EncryptedStore, provider: DeviceKeyProvider, now = Date.now, attempts?: UnlockAttemptStore) {
     this.actor = structuredClone(actor); this.grant = structuredClone(grant);
     this.store = store; this.provider = provider; this.now = now;
+    this.attempts = attempts;
   }
   private check() {
     const now = this.now();
@@ -59,10 +65,18 @@ export class OfflineVault {
     return this.key;
   }
   async unlock() {
+    this.lock();
     assertOfflineGrant(this.actor, this.grant, this.now());
     requireControl(this.provider.assurance === "APPROVED_DEVICE_BOUND", "SECURE_WRAPPER_REQUIRED");
+    requireControl(this.attempts, "PERSISTENT_UNLOCK_CONTROL_REQUIRED");
+    requireControl(this.now() >= this.lastSeen, "CLOCK_ROLLBACK");
+    const scope = JSON.stringify([this.grant.deviceId, this.actor.id, this.grant.issuedAt]);
+    const attemptId = await this.attempts.reserve(scope);
     const key = await this.provider.unlock(this.grant.deviceId, this.actor.id);
-    requireControl(!key.extractable && key.algorithm.name === "AES-GCM" && key.usages.includes("encrypt") && key.usages.includes("decrypt"), "INVALID_DEVICE_KEY");
+    requireControl(!key.extractable && key.algorithm.name === "AES-GCM" && (key.algorithm as AesKeyAlgorithm).length === 256 && key.usages.includes("encrypt") && key.usages.includes("decrypt"), "INVALID_DEVICE_KEY");
+    assertOfflineGrant(this.actor, this.grant, this.now());
+    requireControl(this.now() >= this.lastSeen, "CLOCK_ROLLBACK");
+    await this.attempts.succeeded(scope, attemptId);
     this.key = key; this.lastActivity = this.now(); this.lastSeen = this.lastActivity;
   }
   lock() { this.key = undefined; }

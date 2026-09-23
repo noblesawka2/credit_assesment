@@ -13,12 +13,13 @@ const screens = [
   ["evidence", "Supporting documents", "Documents that support your answers", []],
   ["review", "Review", "Review before submitting", []]
 ];
-const answers = {};
+const answers = Object.create(null);
 let session = null;
 let draft = null;
 let ready = false;
 let saving = false;
 let saveAgain = false;
+let pendingSave = null;
 let timer;
 const content = document.querySelector("#content");
 const status = document.querySelector("#save-status");
@@ -55,11 +56,18 @@ async function save() {
   const requestedAmountKobo = (BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0"))).toString();
   saving = true;
   try {
-    const response = await fetch("/api/drafts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: draft?.id, revision: draft?.revision, answers, memberNumber: answers.memberNumber, fullNameClaim: answers.fullNameClaim, requestedAmountKobo, idempotencyKey: crypto.randomUUID() }) });
+    if (!pendingSave) pendingSave = JSON.stringify({ id: draft?.id, revision: draft?.revision, answers, memberNumber: answers.memberNumber, fullNameClaim: answers.fullNameClaim, requestedAmountKobo, idempotencyKey: crypto.randomUUID() });
+    const sentAnswers = JSON.stringify(JSON.parse(pendingSave).answers);
+    const response = await fetch("/api/drafts", { method: "POST", headers: { "Content-Type": "application/json" }, body: pendingSave });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error);
-    draft = result; status.textContent = "Draft saved online. Revision " + result.revision + ".";
-  } catch { status.textContent = "Not saved. Secure identity, member verification and database access must be available. Your entries remain in memory only."; }
+    if (!response.ok) {
+      if ([400, 401, 403, 409, 413].includes(response.status)) pendingSave = null;
+      throw new Error(result.error);
+    }
+    draft = result; pendingSave = null;
+    if (sentAnswers !== JSON.stringify(answers)) saveAgain = true;
+    status.textContent = "Draft saved online. Revision " + result.revision + ". Membership, KYC and exposure still require verification; this is not an approval.";
+  } catch { status.textContent = "Save not confirmed. Your entries remain in memory only. Reconnect and retry before leaving; membership claims are not verified."; }
   finally { saving = false; if (saveAgain) { saveAgain = false; void save(); } }
 }
 function render() {
@@ -74,7 +82,29 @@ function render() {
   }
   if (staff) {
     document.querySelector("#title").textContent = "Staff workspace";
-    const card = element("div", null, "card empty"); card.append(element("h2", "Secure access required"), element("p", "Case data, internal scores and verification notes are not available in this public shell. Staff appraisal and approval screens are not yet implemented.")); content.append(card); return;
+    const card = element("div", null, "card");
+    card.append(element("h2", "Online draft capture"), element("p", "Minerva is not required for draft capture. Membership, KYC and exposure remain unverified. Appraisal, submission and approval are not enabled."));
+    if (ready) {
+      const refresh = element("button", "Load my authorized drafts", "secondary");
+      const list = element("div");
+      refresh.addEventListener("click", async () => {
+        refresh.disabled = true; list.replaceChildren();
+        try {
+          const response = await fetch("/api/drafts", { cache: "no-store" });
+          if (!response.ok) throw new Error("DRAFT_LIST_UNAVAILABLE");
+          const drafts = await response.json();
+          for (const record of drafts) {
+            const button = element("button", "Resume " + record.id + " - revision " + record.revision + " - " + record.verification_status, "secondary");
+            button.addEventListener("click", () => { void resumeDraft(record.id); });
+            list.append(button);
+          }
+          if (!drafts.length) list.append(element("p", "No drafts in your authorized scope."));
+        } catch { list.append(element("p", "Draft list unavailable. Sign in again or retry online.")); }
+        finally { refresh.disabled = false; }
+      });
+      card.append(refresh, list);
+    } else card.append(element("p", "Sign in with an approved intake role after the database and authentication configuration are complete."));
+    content.append(card); return;
   }
   const screen = screens[current]; document.querySelector("#title").textContent = screen[2];
   const progress = document.createElement("progress"); progress.max = screens.length; progress.value = current + 1; progress.setAttribute("aria-label", "Assessment step " + (current + 1) + " of " + screens.length); content.append(progress);
@@ -92,14 +122,28 @@ function render() {
   content.append(actions);
 }
 function connection() { document.querySelector("#connection").textContent = navigator.onLine ? "Online" : "Offline - capture disabled"; render(); }
+async function resumeDraft(id) {
+  clearTimeout(timer);
+  if (saving || pendingSave) { status.textContent = "Confirm the pending save before opening another draft."; return; }
+  if (Object.keys(answers).length && !confirm("Replace the current in-memory entries with the saved draft? Unsaved changes will be lost.")) return;
+  try {
+    const response = await fetch("/api/drafts/" + encodeURIComponent(id), { cache: "no-store" });
+    if (!response.ok) throw new Error("DRAFT_UNAVAILABLE");
+    const record = await response.json();
+    for (const key of Object.keys(answers)) delete answers[key];
+    Object.assign(answers, record.answers); draft = record;
+    status.textContent = "Saved draft loaded. Verification is still required before formal progression.";
+    changeRoute("/credit/apply/start");
+  } catch { status.textContent = "Draft unavailable or access denied. Current entries have not changed."; }
+}
 addEventListener("popstate", render); addEventListener("online", connection); addEventListener("offline", connection);
 connection();
 try {
   const health = await fetch("/api/health", { cache: "no-store" }).then(response => response.json());
   const response = await fetch("/api/session", { cache: "no-store" });
   if (response.ok) session = await response.json();
-  ready = Boolean(session && health.identityConfigured && health.databaseConfigured && health.coreConfigured);
-  document.querySelector("#setup").textContent = ready ? "Authenticated online draft capture only. This foundation does not yet support final submission or loan decisions." : "Implementation preview - secure identity, registered-member verification and database setup are pending. Inputs are disabled. Do not use for real applications.";
+  ready = Boolean(session?.canCapture && health.identityConfigured && health.databaseConfigured);
+  document.querySelector("#setup").textContent = ready ? "Authenticated draft capture; Minerva is optional. All claims require verification. Final submission and loan decisions remain disabled." : "Implementation preview - authenticated intake permission and database setup are required. Inputs are disabled. Do not use for real applications.";
 } catch { document.querySelector("#setup").textContent = "Offline shell only. Secure offline capture is not activated. No personal information is stored in the shell cache."; }
 render();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ROLES, authorize, memberView, assertCaseAccess } from "../src/domain/access.ts";
-import { WORKFLOW, transition, type Status } from "../src/domain/workflow.ts";
+import { WORKFLOW, UNAPPROVED_TARGETS, transition, type Status } from "../src/domain/workflow.ts";
 import { draftPolicy, publishProduct, activePolicy } from "../src/domain/policy.ts";
 import { FACTORS, calculateScore, groupReliability, type Factor, type ScoreModel } from "../src/domain/score.ts";
 import { verifyMoney } from "../src/domain/verification.ts";
@@ -17,6 +17,11 @@ for (const role of ["ASSISTED_INTAKE", "CERTIFIED_FIELD_AGENT"] as const) test(r
 test("inactive and unassigned actors cannot access a case", () => {
   assert.throws(() => assertCaseAccess(actor("CREDIT_OFFICER", "unassigned"), creditCase));
   assert.throws(() => authorize({ ...actor("CREDIT_APPROVER"), active: false }, "DECIDE"));
+});
+test("approved matrix denies unresolved officer intake and uncertified agent capture", () => {
+  assert.throws(() => authorize(actor("CREDIT_OFFICER"), "CAPTURE"), /FORBIDDEN/);
+  assert.throws(() => authorize(actor("CERTIFIED_FIELD_AGENT"), "CAPTURE"), /FORBIDDEN/);
+  for (const role of ROLES.filter(role => role !== "COMPLIANCE_CONTROL")) assert.throws(() => authorize(actor(role), "REPORT"), /FORBIDDEN|MEMBER_ROLE_CONFLICT/);
 });
 test("members see only their answers and public case fields", () => {
   const view = memberView({ id: "case", reference: null, status: "DRAFT", reported: {}, requestedAmountKobo: "100" });
@@ -61,6 +66,10 @@ test("every undeclared workflow edge is rejected", () => {
 });
 test("every declared workflow edge works only with its required actor and controls", () => {
   for (const [source, targets] of Object.entries(WORKFLOW)) for (const target of targets) {
+    if (UNAPPROVED_TARGETS.includes(target)) {
+      assert.throws(() => transition({ ...creditCase, status: source as Status }, target, actor("CREDIT_APPROVER", "approver"), controls, change, now), /TRANSITION_AUTHORITY_NOT_APPROVED/);
+      continue;
+    }
     let chosen = actor("CREDIT_OFFICER", "officer");
     if (["SUBMITTED", "WITHDRAWN"].includes(target)) chosen = actor("ASSISTED_INTAKE", "officer");
     else if (target === "MEMBER_ACCEPTED") chosen = { ...actor("MEMBER", "member"), externalMemberId: creditCase.externalMemberId };

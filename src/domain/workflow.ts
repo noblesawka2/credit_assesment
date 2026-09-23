@@ -22,6 +22,7 @@ export const WORKFLOW = {
   DECLINED: ["CLOSED"], WITHDRAWN: ["CLOSED"], DEFAULT_OUTCOME_RECORDED: ["CLOSED"], CLOSED: []
 } as const;
 export type Status = keyof typeof WORKFLOW;
+export const UNAPPROVED_TARGETS: readonly Status[] = ["WITHDRAWN", "PRELIMINARY_CHECK", "ASSIGNED", "RETURNED_FOR_INFORMATION", "CLOSED", "DEFAULT_OUTCOME_RECORDED"];
 export interface WorkflowCase {
   id: string; externalMemberId: string; createdBy: string; assignedUserIds: string[];
   status: Status; revision: number; requestedAmountKobo: bigint;
@@ -47,6 +48,8 @@ export function transition(creditCase: WorkflowCase, target: Status, actor: Acto
   assertCaseAccess(actor, creditCase);
   requireControl(controls.online, "ONLINE_ONLY");
   requireControl((WORKFLOW[creditCase.status] as readonly string[]).includes(target), "INVALID_TRANSITION");
+  requireControl(!UNAPPROVED_TARGETS.includes(target), "TRANSITION_AUTHORITY_NOT_APPROVED");
+  if (target === "SUBMITTED") requireControl(!actor.roles.includes("CERTIFIED_FIELD_AGENT"), "AGENT_SUBMISSION_NOT_APPROVED");
   requireControl(change.expectedRevision === creditCase.revision, "REVISION_CONFLICT");
   reason(change.reason);
   requireControl(Boolean(change.correlationId) && Number.isFinite(Date.parse(change.slaDueAt)), "TRANSITION_METADATA_REQUIRED");

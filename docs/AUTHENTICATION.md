@@ -1,0 +1,45 @@
+# Supabase staff authentication — implementation and activation gates
+
+Supabase Auth is the user-approved single identity provider. No password/member identity table, public signup route, fake user or role header is created. The existing IdentityAdapter is implemented by StaffAuthentication and validates protected API requests server-side. Login UI: `/credit/auth`; POST `/api/auth/sign-in`, `/sign-out`, `/forgot-password`, `/reset-password`. `/api/session` requires authentication. Unknown authentication routes do not fall through to registration.
+
+## Existing identities and approved roles
+
+Use an existing, confirmed Supabase staff account. An authorized administrator must set `app_metadata.nobles` with `staff: true`, `active: true`, and `roles` containing only approved existing role names in `PERMISSIONS_REVIEW.md`. Browser input and user_metadata are ignored. Unknown roles, MEMBER mixed with staff, absent flags, disabled/banned/deleted/unconfirmed accounts fail closed. This metadata contract and enrollment must be verified in staging; it is not a new directory. Agent capture remains denied until management defines/provisions the certification threshold/capability; no offline capability is automatically granted.
+
+Sign-in delegates the password to Supabase over HTTPS. Every protected request loads a non-revoked/non-expired server session, checks the Supabase user endpoint and current administrator account state/metadata, and enforces the approved application role policy. Provider failures deny access. No client-supplied JWT claims are trusted as role truth. The server-only service-role credential is required for current banned/disabled account inspection; it is never shipped to the browser or used as the application database role.
+
+## Sessions and reset flow
+
+Browser receives only an opaque random session cookie. Server stores its SHA-256 hash and AES-GCM-encrypted provider access token. Production cookie is Secure, HttpOnly, SameSite=Strict, Path=/ with the __Host- prefix; local loopback HTTP uses a separately named HttpOnly cookie, not weakened TLS. CSRF checks require exact Origin for every mutation and reject cross-site requests. No localStorage tokens, refresh tokens or reset codes are persisted by the client.
+
+Sessions expire at the earlier of the provider access-token lifetime and one hour. There is no silent refresh: reauthenticate after expiry. Sign-out revokes the local session before provider logout, preventing replay even if provider logout fails. Password reset revokes local sessions, updates through the provider and globally signs out. Database-clock authentication start times, revocation watermarks and per-user transaction locks prevent in-flight old sign-ins from recreating sessions after account-wide revocation. A partially failed provider reset needs a new recovery request and operator review of STARTED/FAILURE events; distributed provider/DB operations are not atomic.
+
+Forgot-password always gives an account-neutral message; delivery/provider failures are recorded with fixed event codes, never a provider response or email/password. Recovery uses emailed numeric OTP and Supabase's recovery-only verification; no recovery token in application URLs, logs or persistent browser storage. Invalid, expired, used or wrong-type codes cannot create a normal session. Reset requires a fresh code and a password of at least 12 characters; the provider's stronger policy still applies. Confirm configured OTP expiry and one-use behavior in staging.
+
+## Required configuration and dashboard work
+
+Keep the current local APP_ORIGIN (`http://localhost:3100`) for development. Production NODE_ENV/APP_ORIGIN must be configured separately on the hosting platform after real HTTPS exists. No probe of the future hostname is needed. All database CA/hostname checks and Supabase HTTPS verification stay enabled. Use the exact selected loopback origin consistently in the browser (localhost and 127.0.0.1 are different origins).
+
+Server-only secrets: SUPABASE_URL (the approved project HTTPS URL), SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY and the existing DATA_ENCRYPTION_KEY; AUTH_ENABLED=true only after schema/privilege/staging verification. Never infer the Auth project solely from a pooler hostname. Verify project reference and database target match deployment intent. Keep server secret keys out of git, frontend build, command-line arguments and logs.
+
+In Supabase: disable public new-user signup; provision/invite staff through the existing administrative process; configure an approved SMTP sender/domain/deliverability; set local Auth site URL for local testing, separate production redirects after HTTPS; configure Recovery email to display the built-in `{{ .Token }}` one-time code with expiry instructions rather than a token URL; enforce password policy and recovery expiry. Do not disable email confirmation to get tests passing. No dashboard changes or real email sends were performed here.
+
+Provider references used for the integration: [Supabase password authentication](https://supabase.com/docs/guides/auth/passwords), [email templates](https://supabase.com/docs/guides/auth/auth-email-templates), [official Auth API schema](https://github.com/supabase/auth/blob/master/openapi.yaml), [sign-out semantics](https://supabase.com/docs/guides/auth/signout). The application adds a server session revocation check because provider access tokens can outlive logout; do not rely on browser cookie deletion alone.
+
+## SQL proposal — not applied, not automatically discovered
+
+`db/proposals/002_staff_security.sql` is the exact proposed additive SQL. It creates a private nobles_security schema with four tables (encrypted sessions, revocation watermarks, shared atomic rate-limit counters and append-only fixed-field security events), one function, two immutability triggers and an index. No existing rows/tables are updated/deleted/dropped. REVOKEs affect only the new schema/objects and known Supabase API roles. No destructive data operation; deployment/permission mistakes can still cause outages.
+
+This proposal is outside db/migrations and is NOT run by the existing single-migration runner. Do not run it manually without explicit review/approval, staging tests and a migration-ledger plan. The existing 001 migration remains unchanged. No SQL was applied.
+
+Before activation, review inherited/default privileges and make the runtime a separate non-owner, non-superuser, non-BYPASSRLS role with no SET ROLE path to an owner. Keep nobles_security out of the Supabase exposed schemas; do not grant it to anon/authenticated/service_role or browser clients. Privately grant the runtime schema USAGE, sessions/revocations/rate_limits SELECT/INSERT/UPDATE, and events INSERT only. Do not grant runtime DELETE, TRUNCATE, schema CREATE, ownership or trigger-disable rights. Credit-table RLS and scope grants need their own approved migration review. Security storage is server-private ACL controlled; it does not replace per-case RLS.
+
+Rate limits persist across process restarts/instances using atomic PostgreSQL upserts and server time. Keys are HMACed, not plaintext emails/IPs. Auth attempts have both per-address and per-account budgets; all protected API requests have an address budget. X-Forwarded-For is deliberately not trusted: behind a proxy, all users may share a conservative limit until a trusted-proxy design is approved. Storage failure must not allow authentication. Review thresholds, load, authenticated-user budgets, proxy handling and expiry cleanup in staging before public exposure.
+
+## Audit scope and remaining limitations
+
+Session creation + LOGIN_SUCCESS are transactional; logout mutation + SIGN_OUT are transactional. Login failure, expiry/rejection, reset request/start/success/failure/delivery failure, rate limiting and failed authorization use immutable fixed-field events. Passwords, tokens, URLs, keys, email/IP values and raw provider errors never enter these events. Draft creates/edits and per-record draft-list access are audited in their repository transactions; failed audit commits fail the operation.
+
+The full section-17 business audit contract is NOT complete: roles/reason/before-after snapshots/device/session correlation across every business event, submission/recommendation/checker/approval/rejection/reopening/export/sync/policy/admin changes, protected audit reports, privileged-DB tamper protection and external administrative-event ingestion need implementation/verification. Provider-admin changes made outside this application require Supabase audit ingestion/monitoring. Keep all live decisions disabled until this is complete. PostgreSQL owner/superuser can bypass ordinary triggers; immutable external retention and operational privilege controls remain required.
+
+No real Supabase Auth account, mail delivery, reset expiry, deployed cookies, DB-backed rate-limit concurrency or audit/ACL integration test has run. Unit/HTTP tests use explicitly synthetic test doubles only. Authentication is implemented but not activated or certified for production.

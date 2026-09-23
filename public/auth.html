@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Nobles staff sign-in</title><link rel="stylesheet" href="/style.css"><script src="/auth.js" defer></script></head>
+<body><main>
+<h1>Nobles Cooperative staff access</h1>
+<p>Existing authorized staff accounts only. No public registration. Network access is required.</p>
+<form id="sign-in"><h2>Sign in</h2><label>Email <input name="email" type="email" autocomplete="username" required maxlength="254"></label><label>Password <input name="password" type="password" autocomplete="current-password" required maxlength="1024"></label><button>Sign in</button></form>
+<form id="forgot-password"><h2>Forgot password</h2><label>Email <input name="email" type="email" autocomplete="username" required maxlength="254"></label><button>Send recovery code</button></form>
+<form id="reset-password"><h2>Reset password</h2><p>Use the one-time recovery code from your email. Codes expire; request a new code if necessary.</p><label>Email <input name="email" type="email" autocomplete="username" required maxlength="254"></label><label>Recovery code <input name="token" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,10}" required></label><label>New password (at least 12 characters) <input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></label><button>Reset password</button></form>
+<button id="sign-out" type="button">Sign out</button><p id="auth-status" role="status" aria-live="polite"></p>
+<a href="/credit/staff">Staff workspace</a>
+</main></body></html>

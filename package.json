@@ -12,7 +12,9 @@
     "test": "node --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && node scripts/build.ts",
-    "migrate": "node --env-file-if-exists=.env scripts/migrate.ts"
+    "migrate": "node --env-file-if-exists=.env.migrate scripts/migrate.ts",
+    "db:check": "node --env-file-if-exists=.env scripts/db-check.ts",
+    "readiness": "node --env-file-if-exists=.env scripts/readiness.ts"
   },
   "dependencies": {
     "pg": "8.23.0"

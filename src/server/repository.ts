@@ -14,13 +14,34 @@ export class DraftRepository {
     try {
       await client.query("BEGIN");
       await client.query("SELECT set_config('nobles.actor_id', $1, true)", [actor.id]);
-      const result = await client.query("SELECT id, reference, status, revision, requested_amount_kobo, updated_at FROM credit_applications ORDER BY updated_at DESC LIMIT 100");
+      const result = await client.query("SELECT id, reference, status, revision, requested_amount_kobo, updated_at, CASE WHEN external_member_id IS NULL THEN 'PENDING_MANUAL_VERIFICATION' ELSE 'EXTERNAL_CHECKED' END AS verification_status FROM credit_applications WHERE status='DRAFT' ORDER BY updated_at DESC LIMIT 100");
+      const correlationId = randomUUID();
+      for (const row of result.rows) {
+        await client.query("INSERT INTO credit_audit_logs (id,entity_id,actor_id,action,old_revision,new_revision,reason,correlation_id) VALUES ($1,$2,$3,'SENSITIVE_ACCESS',$4,$4,'Authorized draft list access',$5)", [randomUUID(), row.id, actor.id, row.revision, correlationId]);
+      }
       await client.query("COMMIT");
       return result.rows;
     } catch (error) { await client.query("ROLLBACK"); throw error; }
     finally { client.release(); }
   }
-  async save(actor: Actor, externalMemberId: string, body: { id?: string; revision?: number; answers: unknown; requestedAmountKobo: string; idempotencyKey: string }) {
+  async read(actor: Actor, id: string) {
+    authorize(actor, "CAPTURE");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('nobles.actor_id', $1, true)", [actor.id]);
+      const result = await client.query("SELECT * FROM credit_applications WHERE id=$1 AND status='DRAFT' FOR SHARE", [id]);
+      requireControl(result.rowCount === 1, "CASE_NOT_FOUND");
+      const row = result.rows[0];
+      if (actor.roles.includes("MEMBER")) requireControl(Boolean(actor.externalMemberId) && row.external_member_id === actor.externalMemberId, "FORBIDDEN");
+      const answers = this.cipher.open(row.reported_ciphertext, "application:" + id);
+      await client.query("INSERT INTO credit_audit_logs (id,entity_id,actor_id,action,old_revision,new_revision,reason,correlation_id) VALUES ($1,$2,$3,'SENSITIVE_ACCESS',$4,$4,'Authorized draft resume',$5)", [randomUUID(), id, actor.id, row.revision, randomUUID()]);
+      await client.query("COMMIT");
+      return { id: row.id, reference: row.reference, status: row.status, revision: row.revision, answers, verificationStatus: row.external_member_id === null ? "PENDING_MANUAL_VERIFICATION" : "EXTERNAL_CHECKED" };
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
+  }
+  async save(actor: Actor, externalMemberId: string | null, body: { id?: string; revision?: number; answers: unknown; requestedAmountKobo: string; idempotencyKey: string }) {
     authorize(actor, "CAPTURE");
     if (actor.roles.includes("MEMBER")) requireControl(actor.externalMemberId === externalMemberId, "FORBIDDEN");
     money(body.requestedAmountKobo);
@@ -33,7 +54,8 @@ export class DraftRepository {
       const previous = await client.query("SELECT * FROM credit_idempotency WHERE actor_id = $1 AND key = $2", [actor.id, body.idempotencyKey]);
       if (previous.rowCount) {
         requireControl(previous.rows[0].request_hash === hash, "IDEMPOTENCY_PAYLOAD_CONFLICT");
-        const receipt = await client.query("SELECT id, reference, status, revision FROM credit_applications WHERE id = $1", [previous.rows[0].application_id]);
+        const receipt = await client.query("SELECT id, reference, status, revision, CASE WHEN external_member_id IS NULL THEN 'PENDING_MANUAL_VERIFICATION' ELSE 'EXTERNAL_CHECKED' END AS \"verificationStatus\" FROM credit_applications WHERE id = $1", [previous.rows[0].application_id]);
+        requireControl(receipt.rowCount === 1, "CASE_NOT_FOUND");
         await client.query("COMMIT");
         return receipt.rows[0];
       }
@@ -56,7 +78,7 @@ export class DraftRepository {
       await client.query("INSERT INTO credit_audit_logs (id,entity_id,actor_id,action,old_revision,new_revision,reason,correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)", [randomUUID(), id, actor.id, body.id ? "DRAFT_UPDATED" : "DRAFT_CREATED", oldRevision, revision, "Member or assisted draft capture", body.idempotencyKey]);
       await client.query("INSERT INTO credit_idempotency (actor_id,key,request_hash,application_id) VALUES ($1,$2,$3,$4)", [actor.id, body.idempotencyKey, hash, id]);
       await client.query("COMMIT");
-      return { id, reference: null, status: "DRAFT", revision };
+      return { id, reference: null, status: "DRAFT", revision, verificationStatus: externalMemberId === null ? "PENDING_MANUAL_VERIFICATION" : "EXTERNAL_CHECKED" };
     } catch (error) { await client.query("ROLLBACK"); throw error; }
     finally { client.release(); }
   }

@@ -11,7 +11,7 @@ export interface Actor {
 }
 export type Action = "CAPTURE" | "VERIFY" | "RECOMMEND" | "CHECK" | "DECIDE" | "COMPLIANCE" | "DISBURSE" | "POLICY_DRAFT" | "POLICY_PUBLISH" | "INTERNAL_VIEW" | "REPORT";
 const permissions: Record<Action, readonly Role[]> = {
-  CAPTURE: ["MEMBER", "ASSISTED_INTAKE", "CERTIFIED_FIELD_AGENT", "CREDIT_OFFICER"],
+  CAPTURE: ["MEMBER", "ASSISTED_INTAKE", "CERTIFIED_FIELD_AGENT"],
   VERIFY: ["CREDIT_OFFICER"], RECOMMEND: ["CREDIT_OFFICER"],
   CHECK: ["OPERATIONS_CHECKER"], DECIDE: ["CREDIT_APPROVER"],
   COMPLIANCE: ["COMPLIANCE_CONTROL"], DISBURSE: ["FINANCE_DISBURSEMENT"],
@@ -21,6 +21,7 @@ const permissions: Record<Action, readonly Role[]> = {
 };
 export function authorize(actor: Actor, action: Action) {
   requireControl(actor.active && actor.roles.some(role => permissions[action].includes(role)), "FORBIDDEN");
+  if (action === "CAPTURE" && actor.roles.includes("CERTIFIED_FIELD_AGENT")) requireControl(actor.capabilities.includes("CERTIFIED_INTAKE"), "FORBIDDEN");
   if (actor.roles.includes("MEMBER")) requireControl(action === "CAPTURE", "MEMBER_ROLE_CONFLICT");
 }
 export function assertCaseAccess(actor: Actor, creditCase: { externalMemberId: string; assignedUserIds: string[]; createdBy: string }) {

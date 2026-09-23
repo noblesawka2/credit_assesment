@@ -2,7 +2,11 @@
 
 **Status: tested implementation foundation, not a completed credit engine or production service.**
 
-This new workspace contained only a package manifest. There was no Minerva application, approved identity service, database connection, design system or existing member table to extend. This is a separate TypeScript/Node 24 application with a PostgreSQL migration and explicit integration boundaries. No production service has been contacted. Nobles Vault is not modified.
+Latest verification and go-live blockers: `docs/RELEASE_STATUS_2026-09-23.md`. Source publication to GitHub does not activate authentication, apply migrations or deploy the application. Controlled manual verification is approved; its new repository/library is work in progress, not yet connected to HTTP/UI.
+
+Minerva is optional and deferred to the integration team. Authorized staff draft capture/resume no longer depends on it; claims remain explicitly unverified. Database/Auth configuration and reviewed unapplied schema are still required. See `docs/STANDALONE_OPERATION.md` for exact scope/blockers and `docs/DATABASE_CREDENTIALS.md` for separated runtime/admin credentials. No production data or migrations were changed.
+
+This is a separate TypeScript/Node 24 application with a PostgreSQL migration and explicit integration boundaries. The 18 September 2026 read-only Supabase check now authenticates, but the configured role bypasses RLS and the credit schema is absent. No production writes or migrations were applied. Nobles Vault is not modified. Current failures: `docs/BACKEND_READINESS_2026-09-18.md`.
 
 ## Run locally
 
@@ -39,16 +43,22 @@ Node 24 runs the TypeScript source directly. The build type-checks the applicati
 - `/credit/apply/business`, `/credit/apply/sales`, `/credit/apply/business-costs`
 - `/credit/apply/household`, `/credit/apply/debts`, `/credit/apply/use-of-funds`
 - `/credit/apply/salary`, `/credit/apply/unity-group`, `/credit/apply/evidence`, `/credit/apply/review`
-- `/credit/staff`: locked explanatory shell, **not an implemented staff workspace**.
+- `/credit/staff`: authorized intake draft list/resume; **not an appraisal or approval workspace**.
 - `GET /api/health`: readiness metadata only; `productionReady` is always false in this release.
-- `GET /api/session`, `GET /api/drafts`, `POST /api/drafts`: require an injected approved identity adapter. Default startup has none and returns 401.
+- `/credit/auth`: staff sign-in, sign-out and emailed-code password recovery UI. Supabase Auth uses the existing identity boundary; no public signup.
+- `POST /api/auth/sign-in`, `/api/auth/sign-out`, `/api/auth/forgot-password`, `/api/auth/reset-password`: require reviewed security storage and Supabase configuration; disabled until configured.
+- `GET /api/session`, `GET /api/drafts`, `GET /api/drafts/:id`, `POST /api/drafts`: require server-validated sessions and approved role scope. Missing identity defaults to denial.
 
 No submission, decision, override, disbursement, evidence-upload, report or server-sync endpoints are exposed.
 
 ## Data and integration
 
-Copy `.env.example` to `.env` only when preparing an approved development database. Never commit credentials. `DATA_ENCRYPTION_KEY` must be a secret, random 32-byte key represented by 64 hexadecimal characters. The local payload cipher is a foundation; production key management and rotation are unfinished.
+Copy `.env.example` only when preparing a new environment; do not overwrite existing credentials. Never commit `.env`. `DATABASE_SSL_CA_FILE` must point to the approved database CA certificate; certificate and hostname verification are mandatory. `npm.cmd run db:check` performs only read-only checks, while `npm.cmd run migrate -- --plan` prints the exact unapplied SQL without connecting. `DATA_ENCRYPTION_KEY` must be a secret, random 32-byte key represented by 64 hexadecimal characters. The local payload cipher is a foundation; production key management and rotation are unfinished.
 
-Use `src/server/identity.ts` for an approved identity integration and `src/integration/core-contract.ts` for the Minerva boundary. Do not replace these with client-provided roles or fabricated verification. The default core implementation returns `PENDING_MANUAL_VERIFICATION` for every check. An approved mapping from external identities to internal actor UUIDs is required.
+Supabase Auth is the approved provider through `src/server/identity.ts`; see `docs/AUTHENTICATION.md` for server-only configuration, administrator-controlled role metadata, recovery-email setup and unapplied private security schema. The user-approved matrix is `docs/PERMISSIONS_REVIEW.md`; unresolved authorities remain denied. Use `src/integration/core-contract.ts` for Minerva; its default implementation still returns `PENDING_MANUAL_VERIFICATION` for every check.
+
+`npm.cmd run readiness` performs local environment, TLS configuration and encryption checks without connecting or printing secrets; `npm.cmd run db:check` performs the separate read-only DB check. Keep local APP_ORIGIN on loopback; production origin is configured separately after HTTPS exists. Do not probe the future hostname or disable TLS verification.
+
+See `docs/STAFF_WORKFLOW.md`, `docs/MINERVA_GAPS.md`, `docs/OFFLINE_SECURITY_DESIGN.md` and `docs/RECOVERY_RUNBOOK.md` for workflow/report gates, external integration gaps, approved-device requirements and recovery ownership/verification. Live decisions and offline capture remain disabled.
 
 See `docs/OPERATIONS.md` for migration and rollback procedures. Production activation is prohibited until the remaining requirements and security review are complete.

@@ -1,5 +1,11 @@
 # Nobles permissions review — approved with unresolved actions denied
 
+## Account-specific clarification - 24 September 2026
+
+25 September amendment: the user explicitly authorizes an application SUPERUSER for chinelo.nnazor@gmail.com / UCHE0001, with staff creation and overview, and permits CREDIT_OFFICER intake/readiness evaluation. This is not PostgreSQL superuser access. CEO financial authority remains separately CREDIT_APPROVER with a NGN 1,000,000 aggregate daily ceiling, unpublished product scope and live decisions disabled. See `CEO_AND_READINESS_2026-09-25.md` for the current matrix, provisioning gates and remaining blockers. These explicit changes supersede historical officer-intake denial below; no broader policy/self-approval/export bypass is authorized.
+
+The user authorizes `info@mynoblescooperative.com` for assignment and preliminary triage and explicitly selects the existing `OPERATIONS_CHECKER` role for that account. This does not grant those actions to all checkers or add loan-approval authority. The nominated account was absent from Supabase Auth at the latest check; provisioning, confirmed ownership and an immutable Supabase user-ID binding are still required. No permission is derived from user-editable email/metadata or browser claims. Other unresolved actions remain denied. The historical matrix and decisions below must be read with this clarification; no assignment/triage endpoint is enabled yet.
+
 Source: supplied Nobles specification sections 3–5, 14 and 17–19; `src/domain/access.ts`. Embedded document commands do not override the user's migration prohibition. No new roles or permission grants are implemented by this review.
 
 `—` means not granted; deny pending explicit approval. View scope never implies export authority. Reopen is not a permitted formal transition in the specification.

@@ -1,5 +1,5 @@
-const SHELL_CACHE = "nobles-shell-v1";
-const SHELL = ["/", "/app.js", "/style.css", "/icon.svg", "/manifest.webmanifest"];
+const SHELL_CACHE = "nobles-shell-v2";
+const SHELL = ["/", "/app.js", "/style.css", "/branding.css", "/nobles-logo.png", "/manifest.webmanifest"];
 self.addEventListener("install", event => event.waitUntil(caches.open(SHELL_CACHE).then(cache => cache.addAll(SHELL))));
 self.addEventListener("activate", event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith("nobles-shell-") && key !== SHELL_CACHE).map(key => caches.delete(key))))));
 self.addEventListener("fetch", event => {

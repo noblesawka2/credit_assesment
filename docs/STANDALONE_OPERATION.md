@@ -1,5 +1,7 @@
 # Standalone intake and database separation - 18 September 2026
 
+Current status: see `CEO_AND_READINESS_2026-09-25.md`. Standalone/security/manual/readiness schemas are applied and local authentication is enabled. Minerva remains optional. Historical statements below about unapplied proposals or absent manual routes are superseded; published policy, actual invitations and broader workflow/offline/recovery acceptance remain outstanding.
+
 Minerva is deferred to the external integration team. It is not a prerequisite for staff authentication or online draft capture. This change does not enable live assessment decisions or certify the application for production.
 
 ## Available without Minerva

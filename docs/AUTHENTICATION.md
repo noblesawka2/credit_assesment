@@ -1,5 +1,7 @@
 # Supabase staff authentication — implementation and activation gates
 
+28 September update: see `PRODUCTION_READINESS_2026-09-28.md` for exact Site URL, callback allowlist, SMTP, invitation and recovery template requirements. Supabase public signup is still enabled. Both live auth routes return 404; local role-isolation/cookie tests pass. Local authentication/security schemas and one-use invitation handling exist, but hosted/provider acceptance remains outstanding. No CEO account operation or invitation flag enablement was performed. Older unapplied-schema/hosting statements below are historical.
+
 Supabase Auth is the user-approved single identity provider. No password/member identity table, public signup route, fake user or role header is created. The existing IdentityAdapter is implemented by StaffAuthentication and validates protected API requests server-side. Login UI: `/credit/auth`; POST `/api/auth/sign-in`, `/sign-out`, `/forgot-password`, `/reset-password`. `/api/session` requires authentication. Unknown authentication routes do not fall through to registration.
 
 ## Existing identities and approved roles

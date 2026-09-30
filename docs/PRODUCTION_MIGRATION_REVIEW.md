@@ -1,4 +1,6 @@
-# Production migration review - awaiting approval
+# Historical foundation migration review
+
+Current status: the user authorized the explicit five-migration bundle, which was rehearsed and applied on 24 September 2026. See `RELEASE_STATUS_2026-09-24.md` for checksums and read-only verification. The original foundation SQL below remains unchanged. Statements about pending approval/unapplied proposals below describe the historical single-file review, not current deployment state. Use `npm.cmd run migrate:release -- --plan` for the full current ordered manifest.
 
 **NOT APPLIED.** The target is production. Certificate/hostname verification stays enabled with the user-supplied CA. Update 18 September: the read-only check authenticates; no credit tables, migration ledger or three named foundation-function collisions were found. The configured role has BYPASSRLS and cannot be the application runtime. See `BACKEND_READINESS_2026-09-18.md` for backend TLS observations. The new `db/proposals/002_staff_security.sql` is a separate, unapplied proposal NOT included in the reviewed runner below.
 

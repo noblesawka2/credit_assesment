@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { X509Certificate } from "node:crypto";
@@ -50,6 +50,22 @@ test("connection-string options cannot overwrite the verified TLS object", async
       await assert.rejects(databaseConfig({ ...env, DATABASE_URL: "postgresql://test:test@database.invalid/test?" + query }));
     }
     await assert.rejects(databaseConfig({ ...env, NODE_TLS_REJECT_UNAUTHORIZED: "0" }), /TLS_VERIFICATION_BYPASS_FORBIDDEN/);
+  });
+});
+
+test("runtime CA injection is memory-only, unambiguous and retains verify-full TLS", async () => {
+  await withCertificate(async env => {
+    const certificate = await readFile(env.DATABASE_SSL_CA_FILE!, "utf8");
+    const encoded = Buffer.from(certificate).toString("base64");
+    const config = await databaseConfig({ ...env, DATABASE_SSL_CA_FILE: undefined, DATABASE_SSL_CA_BASE64: encoded });
+    const ssl = config.ssl as ConnectionOptions;
+    assert.equal(ssl.ca, certificate); assert.equal(ssl.rejectUnauthorized, true); assert.equal(ssl.checkServerIdentity, checkServerIdentity);
+    assert.equal(ssl.servername, "database.invalid");
+    await assert.rejects(databaseConfig({ ...env, DATABASE_SSL_CA_BASE64: encoded }), /DATABASE_CA_SOURCE_AMBIGUOUS/);
+    for (const value of ["not base64", encoded + "\n", Buffer.from("not a CA").toString("base64"), Buffer.from("-----BEGIN PRIVATE KEY-----").toString("base64"), Buffer.from(certificate + "unexpected material").toString("base64")]) {
+      await assert.rejects(databaseConfig({ ...env, DATABASE_SSL_CA_FILE: undefined, DATABASE_SSL_CA_BASE64: value }));
+    }
+    await assert.rejects(databaseConfig({ DATABASE_ADMIN_URL: env.DATABASE_URL, DATABASE_SSL_CA_BASE64: encoded }, "admin"), /DATABASE_ADMIN_SSL_CA_FILE_REQUIRED/);
   });
 });
 
@@ -123,4 +139,20 @@ test("runtime guard rejects inherited privilege, schema control, destructive gra
   await assertRuntimeDatabase(pool(safe));
   for (const field of Object.keys(safe)) await assert.rejects(assertRuntimeDatabase(pool({ ...safe, [field]: true })));
   await assert.rejects(assertRuntimeDatabase(pool(safe, false)), /STANDALONE_INTAKE_SCHEMA_REQUIRED/);
+});
+
+test("migration role checks bind the target while runtime defaults to current user", async () => {
+  const targets: unknown[] = [];
+  const pool = { query: async (sql: string, values?: unknown[]) => {
+    if (sql.includes("pg_roles")) {
+      assert.match(sql, /COALESCE\(\$1::name,current_user\)/);
+      assert.match(sql, /has_any_column_privilege/);
+      targets.push(values?.[0]);
+      return { rows: [{ privileged_role: false, schema_control: false, unsafe_table_privileges: false, missing_rls: false }] };
+    }
+    return { rows: [{ ready: true }] };
+  } } as unknown as pg.Pool;
+  await assertRuntimeDatabase(pool);
+  await assertRuntimeDatabase(pool, "nobles_app");
+  assert.deepEqual(targets, [null, "nobles_app"]);
 });

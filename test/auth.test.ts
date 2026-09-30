@@ -13,7 +13,7 @@ import { DomainError } from "../src/domain/validation.ts";
 const userId = "01900000-0000-7000-8000-000000000001";
 const user = { id: userId, email_confirmed_at: "2026-01-01T00:00:00Z", app_metadata: { nobles: { active: true, staff: true, roles: ["CREDIT_OFFICER"] } } };
 const key = "12".repeat(32);
-function fixture(origin = "http://localhost:3100") {
+function fixture(origin = "http://localhost:3100", surface: "staff" | "administration" | "local" = "local") {
   const sessions = new Map<string, StoredSession>();
   const events: SecurityEvent[] = [];
   const counts = new Map<string, number>();
@@ -45,7 +45,7 @@ function fixture(origin = "http://localhost:3100") {
     async resetPassword() { state.resets++; },
     async signOut() {}
   };
-  const auth = new StaffAuthentication(provider, store, new PayloadCipher(key), origin, key);
+  const auth = new StaffAuthentication(provider, store, new PayloadCipher(key), origin, key, surface);
   const request = (cookie = "") => ({ headers: { cookie }, socket: { remoteAddress: "127.0.0.1" } }) as IncomingMessage;
   let cookie = "";
   const response = { setHeader(_name: string, value: string) { cookie = value; } } as ServerResponse;
@@ -63,6 +63,82 @@ test("staff identity accepts only server-controlled approved existing roles", ()
   assert.throws(() => staffActor({ ...user, banned_until: "2099-01-01T00:00:00Z" }), /AUTHENTICATION_FAILED/);
   assert.throws(() => staffActor({ ...user, deleted_at: "2026-01-01" }), /AUTHENTICATION_FAILED/);
   assert.throws(() => staffActor({ ...user, app_metadata: { nobles: { ...user.app_metadata.nobles, active: false } } }), /AUTHENTICATION_FAILED/);
+  assert.throws(() => staffActor({ ...user, app_metadata: { nobles: { ...user.app_metadata.nobles, invitationPending: true } } }), /AUTHENTICATION_FAILED/);
+  assert.throws(() => staffActor({ ...user, app_metadata: { nobles: { ...user.app_metadata.nobles, staffId: "invalid staff id" } } }), /AUTHENTICATION_FAILED/);
+});
+
+test("staff and CEO portals reject the other surface's sessions", async () => {
+  const administration = fixture("https://checker.example.test", "administration");
+  await assert.rejects(administration.login(), /AUTHENTICATION_FAILED/);
+  const staff = fixture("https://staff.example.test", "staff");
+  const actor = { id: userId, active: true, roles: ["SUPERUSER"] as Array<"SUPERUSER">, capabilities: [], staffId: "UCHE0001" };
+  staff.provider.signIn = async () => ({ accessToken: "SYNTHETIC_TOKEN", actor, expiresAt: Date.now() + 60000 });
+  await assert.rejects(staff.login(), /AUTHENTICATION_FAILED/);
+});
+
+for (const surface of ["staff", "administration"] as const) test(surface + " session copied to the opposite portal is rejected and revoked", async () => {
+  const origin = surface === "staff" ? "https://staff.example.test" : "https://checker.example.test";
+  const opposite = surface === "staff" ? "administration" : "staff";
+  const setup = fixture(origin, surface);
+  const actor = staffActor({ ...user, app_metadata: { nobles: { ...user.app_metadata.nobles,
+    roles: surface === "staff" ? ["CREDIT_OFFICER"] : ["SUPERUSER", "CREDIT_APPROVER"] } } });
+  setup.provider.signIn = async () => ({ accessToken: "SYNTHETIC_TOKEN", actor, expiresAt: Date.now() + 60000 });
+  setup.provider.validate = async () => actor;
+  const cookie = await setup.login();
+  assert.match(setup.cookie(), /^__Host-nobles-session=/);
+  assert.match(setup.cookie(), /; Path=\/; HttpOnly; SameSite=Strict; Max-Age=\d+; Secure$/);
+  assert.doesNotMatch(setup.cookie(), /(?:^|;)\s*Domain=/i);
+  assert.equal((await setup.auth.authenticate(setup.request(cookie)))?.id, userId);
+  const otherPortal = new StaffAuthentication(setup.provider, setup.store, new PayloadCipher(key),
+    opposite === "staff" ? "https://staff.example.test" : "https://checker.example.test", key, opposite);
+  assert.equal(await otherPortal.authenticate(setup.request(cookie)), null);
+  assert.equal(setup.sessions.size, 0);
+  assert.ok(setup.events.some(event => event.action === "SESSION_REJECTED"));
+  assert.equal(await setup.auth.authenticate(setup.request(cookie)), null);
+});
+
+test("one-use invitation acceptance requires provider verification and revokes sessions", async () => {
+  const setup = fixture();
+  let used = false;
+  let changes = 0;
+  setup.provider.inviteSession = async () => {
+    if (used) throw new DomainError("AUTHENTICATION_FAILED");
+    used = true;
+    return { actor: staffActor(user), accessToken: "SYNTHETIC_INVITE_SESSION", expiresAt: Date.now() + 60000 };
+  };
+  setup.provider.finishInvitation = async () => { changes++; };
+  const body = { tokenHash: "a".repeat(64), password: "synthetic-new-password" };
+  await setup.auth.handle("accept-invite", body, setup.request(), setup.response);
+  assert.equal(changes, 1);
+  assert.ok(setup.events.some(event => event.action === "INVITATION_ACCEPTED"));
+  assert.ok(!JSON.stringify(setup.events).includes(body.tokenHash));
+  assert.ok(!JSON.stringify(setup.events).includes(body.password));
+  await assert.rejects(setup.auth.handle("accept-invite", body, setup.request(), setup.response), /INVITATION_INVALID_OR_EXPIRED/);
+  assert.equal(changes, 1);
+});
+
+test("Supabase invitation verification consumes type invite before password setup and activation", async () => {
+  let profile = { ...user, invited_at: "2026-09-25T10:00:00Z", app_metadata: { nobles: { ...user.app_metadata.nobles, invitationPending: true } } };
+  const calls: { path: string; method: string; body?: Record<string, unknown> }[] = [];
+  const transport: typeof fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    calls.push({ path, method: init?.method ?? "GET", body });
+    if (path.endsWith("/verify")) return Response.json({ access_token: "SYNTHETIC_INVITE_TOKEN", expires_in: 3600 });
+    if (path.includes("/admin/users/") && init?.method === "PUT") profile = { ...profile, app_metadata: body.app_metadata };
+    if (path.endsWith("/user") || path.includes("/admin/users/")) return Response.json(profile);
+    return Response.json({});
+  };
+  const provider = new SupabaseStaffAuth({ SUPABASE_URL: "https://testproject.supabase.co", SUPABASE_ANON_KEY: "synthetic", SUPABASE_SERVICE_ROLE_KEY: "synthetic-admin" }, transport);
+  const invited = await provider.inviteSession("a".repeat(64));
+  assert.equal(calls[0].body?.type, "invite");
+  assert.throws(() => staffActor(profile), /AUTHENTICATION_FAILED/);
+  await provider.finishInvitation(invited.accessToken, "synthetic-new-password", invited.actor.id);
+  assert.equal(profile.app_metadata.nobles.invitationPending, false);
+  assert.equal(staffActor(profile).id, userId);
+  const passwordIndex = calls.findIndex(call => call.path.endsWith("/user") && call.method === "PUT");
+  const activationIndex = calls.findIndex(call => call.path.includes("/admin/users/") && call.method === "PUT");
+  assert.ok(passwordIndex >= 0 && activationIndex > passwordIndex);
 });
 test("local and production origins remain separate without TLS bypass", () => {
   assert.equal(applicationEnvironment({ APP_ORIGIN: "http://localhost:3100" }).origin, "http://localhost:3100");
@@ -185,7 +261,8 @@ test("HTTP authentication routes enforce CSRF, safe errors, no registration and 
     const cookie = response.headers.get("set-cookie")!.split(";")[0];
     const session = await fetch(options.origin + "/api/session", { headers: { Cookie: cookie } });
     assert.deepEqual((await session.json()).roles, ["CREDIT_OFFICER"]);
-    assert.equal((await fetch(options.origin + "/api/drafts", { headers: { Cookie: cookie } })).status, 403);
+    assert.equal((await fetch(options.origin + "/api/drafts", { headers: { Cookie: cookie } })).status, 503);
+    assert.equal((await fetch(options.origin + "/api/admin/overview", { headers: { Cookie: cookie } })).status, 403);
     setup.state.disabled = true;
     assert.equal((await fetch(options.origin + "/api/session", { headers: { Cookie: cookie } })).status, 401);
     assert.ok(setup.events.some(event => event.action === "AUTHORIZATION_DENIED"));

@@ -6,6 +6,7 @@ import type { IdentityAdapter } from "./identity.ts";
 import type { PayloadCipher } from "./encryption.ts";
 import type { StaffAuthProvider } from "./supabase-auth.ts";
 import type { SecurityStore, SecurityEvent } from "./security-store.ts";
+import { clientAddressResolver, type ClientAddress } from "./proxy.ts";
 
 export class StaffAuthentication implements IdentityAdapter {
   private readonly provider: StaffAuthProvider;
@@ -13,10 +14,17 @@ export class StaffAuthentication implements IdentityAdapter {
   private readonly cipher: PayloadCipher;
   private readonly rateKey: Buffer;
   private readonly secure: boolean;
-  constructor(provider: StaffAuthProvider, store: SecurityStore, cipher: PayloadCipher, origin: string, key: string) {
+  private readonly surface: "staff" | "administration" | "local";
+  private readonly clientAddress: ClientAddress;
+  constructor(provider: StaffAuthProvider, store: SecurityStore, cipher: PayloadCipher, origin: string, key: string, surface: "staff" | "administration" | "local" = "local", clientAddress: ClientAddress = clientAddressResolver({})) {
+    this.clientAddress = clientAddress;
+    this.surface = surface;
     this.provider = provider; this.store = store; this.cipher = cipher;
     this.secure = new URL(origin).protocol === "https:";
     this.rateKey = createHmac("sha256", Buffer.from(key, "hex")).update("nobles-rate-limit-v1").digest();
+  }
+  private assertSurface(actor: Actor) {
+    requireControl(this.surface === "local" || (this.surface === "administration" ? actor.roles.includes("SUPERUSER") : !actor.roles.includes("SUPERUSER")), "AUTHENTICATION_FAILED");
   }
   private cookieName() { return this.secure ? "__Host-nobles-session" : "nobles-local-session"; }
   private sessionHash(request: IncomingMessage) {
@@ -31,7 +39,7 @@ export class StaffAuthentication implements IdentityAdapter {
   }
   async audit(action: SecurityEvent["action"], actor?: Actor) { await this.store.audit({ action, actorId: actor?.id, correlationId: randomUUID() }); }
   async rateLimit(request: IncomingMessage, category: string, account?: string) {
-    const address = request.socket.remoteAddress ?? "unknown";
+    const address = this.clientAddress(request);
     const dimensions = [{ value: "ip:" + address, limit: category === "api" ? 120 : 30 }];
     if (account) dimensions.push({ value: "account:" + account.trim().toLowerCase(), limit: category === "sign-in" ? 10 : 5 });
     for (const dimension of dimensions) {
@@ -50,6 +58,7 @@ export class StaffAuthentication implements IdentityAdapter {
     try {
       const value = this.cipher.open(session.ciphertext, "session:" + hash) as { accessToken: string };
       const actor = await this.provider.validate(value.accessToken);
+      this.assertSurface(actor);
       requireControl(actor.id === session.actorId && actor.active, "AUTHENTICATION_FAILED");
       if (!await this.store.session(hash)) return null;
       return actor;
@@ -89,6 +98,7 @@ export class StaffAuthentication implements IdentityAdapter {
         await this.rateLimit(request, path, email);
         const startedAt = await this.store.clock();
         const session = await this.provider.signIn(email, this.password(body.password));
+        this.assertSurface(session.actor);
         requireControl(session.actor.active && Number.isFinite(session.expiresAt) && session.expiresAt > Date.now(), "AUTHENTICATION_FAILED");
         const value = randomBytes(32).toString("hex");
         const hash = createHash("sha256").update(value).digest("hex");
@@ -101,6 +111,29 @@ export class StaffAuthentication implements IdentityAdapter {
         await this.audit("LOGIN_FAILURE");
         if (error instanceof DomainError && ["RATE_LIMITED", "AUTH_SERVICE_UNAVAILABLE"].includes(error.code)) throw error;
         throw new DomainError(error instanceof DomainError && error.code === "AUTHENTICATION_FAILED" ? "AUTHENTICATION_FAILED" : "AUTH_SERVICE_UNAVAILABLE");
+      }
+    }
+    if (path === "accept-invite") {
+      try {
+        await this.rateLimit(request, path);
+        const password = this.password(body.password, true);
+        requireControl(typeof body.tokenHash === "string" && /^[a-zA-Z0-9_-]{32,512}$/.test(body.tokenHash), "AUTHENTICATION_FAILED");
+        requireControl(this.provider.inviteSession && this.provider.finishInvitation, "AUTH_SERVICE_UNAVAILABLE");
+        await this.audit("INVITATION_ACCEPTANCE_STARTED");
+        const invited = await this.provider.inviteSession(body.tokenHash);
+        this.assertSurface(invited.actor);
+        requireControl(invited.expiresAt > Date.now(), "AUTHENTICATION_FAILED");
+        await this.audit("INVITATION_ACCEPTANCE_STARTED", invited.actor);
+        await this.store.revokeUser(invited.actor.id);
+        await this.provider.finishInvitation(invited.accessToken, password, invited.actor.id);
+        await this.store.revokeUser(invited.actor.id);
+        await this.audit("INVITATION_ACCEPTED", invited.actor);
+        this.clearCookie(response);
+        return { message: "Password set. Your invitation is consumed. Sign in with your new password." };
+      } catch (error) {
+        await this.audit("INVITATION_ACCEPTANCE_FAILED");
+        if (error instanceof DomainError && ["RATE_LIMITED", "AUTH_SERVICE_UNAVAILABLE"].includes(error.code)) throw error;
+        throw new DomainError("INVITATION_INVALID_OR_EXPIRED");
       }
     }
     if (path === "forgot-password") {
@@ -118,6 +151,7 @@ export class StaffAuthentication implements IdentityAdapter {
         const password = this.password(body.password, true);
         requireControl(typeof body.token === "string" && /^[0-9]{6,10}$/.test(body.token), "AUTHENTICATION_FAILED");
         const session = await this.provider.recover(email, body.token);
+        this.assertSurface(session.actor);
         await this.audit("PASSWORD_RESET_STARTED", session.actor);
         await this.store.revokeUser(session.actor.id);
         await this.provider.resetPassword(session.accessToken, password);

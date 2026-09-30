@@ -1,5 +1,10 @@
 const status = document.querySelector("#auth-status");
+let inviteToken = new URLSearchParams(location.hash.slice(1)).get("nobles_invite");
+if (location.hash) history.replaceState(null, "", location.pathname);
+if (inviteToken && /^[a-zA-Z0-9_-]{32,512}$/.test(inviteToken)) document.querySelector("#accept-invite").hidden = false;
+else inviteToken = null;
 const messages = {
+  INVITATION_INVALID_OR_EXPIRED: "Invitation invalid, expired or already used. Contact your administrator for a new invitation.",
   AUTHENTICATION_FAILED: "Sign-in failed. Check your credentials or contact your administrator.",
   RESET_INVALID_OR_EXPIRED: "The reset request is invalid or expired. Request a new code and use a password of at least 12 characters.",
   RATE_LIMITED: "Too many attempts. Please try again later.",
@@ -16,6 +21,10 @@ async function send(action, body) {
 for (const form of document.querySelectorAll("form")) form.addEventListener("submit", async event => {
   event.preventDefault();
   const body = Object.fromEntries(new FormData(form));
+  if (form.id === "accept-invite") {
+    if (!inviteToken || body.password !== body.confirmPassword) { status.textContent = "Use a valid invitation and matching passwords."; return; }
+    body.tokenHash = inviteToken; inviteToken = null; delete body.confirmPassword;
+  }
   for (const input of form.querySelectorAll('input[type="password"], input[name="token"]')) input.value = "";
   const button = form.querySelector("button"); button.disabled = true;
   try { await send(form.id, body); } finally { button.disabled = false; }

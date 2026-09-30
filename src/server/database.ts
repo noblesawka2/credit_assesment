@@ -3,11 +3,13 @@ import { X509Certificate } from "node:crypto";
 import { checkServerIdentity } from "node:tls";
 import type { PoolConfig } from "pg";
 import { DomainError, requireControl } from "../domain/validation.ts";
+import { runtimePoolSettings } from "./pool-config.ts";
 
 export async function databaseConfig(env: NodeJS.ProcessEnv = process.env, purpose: "runtime" | "admin" = "runtime"): Promise<PoolConfig> {
   requireControl(env.NODE_TLS_REJECT_UNAUTHORIZED !== "0" && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0", "TLS_VERIFICATION_BYPASS_FORBIDDEN");
   const url = purpose === "admin" ? env.DATABASE_ADMIN_URL : env.DATABASE_URL;
   const caFile = purpose === "admin" ? env.DATABASE_ADMIN_SSL_CA_FILE : env.DATABASE_SSL_CA_FILE;
+  const caBase64 = purpose === "runtime" ? env.DATABASE_SSL_CA_BASE64 : undefined;
   requireControl(Boolean(url), purpose === "admin" ? "DATABASE_ADMIN_URL_REQUIRED" : "DATABASE_URL_REQUIRED");
   let target: URL;
   try { target = new URL(url!); }
@@ -19,13 +21,22 @@ export async function databaseConfig(env: NodeJS.ProcessEnv = process.env, purpo
   const modes = target.searchParams.getAll("sslmode");
   requireControl(modes.length <= 1 && modes.every(mode => mode === "verify-full"), "DATABASE_REQUIRES_VERIFY_FULL");
   target.searchParams.delete("sslmode");
-  requireControl(Boolean(caFile), purpose === "admin" ? "DATABASE_ADMIN_SSL_CA_FILE_REQUIRED" : "DATABASE_SSL_CA_FILE_REQUIRED");
+  requireControl(Boolean(caFile) || Boolean(caBase64), purpose === "admin" ? "DATABASE_ADMIN_SSL_CA_FILE_REQUIRED" : "DATABASE_SSL_CA_FILE_REQUIRED");
+  requireControl(!(caFile && caBase64), "DATABASE_CA_SOURCE_AMBIGUOUS");
   let certificate: string;
-  try { certificate = await readFile(caFile!, "utf8"); }
-  catch { throw new DomainError("DATABASE_CA_UNREADABLE"); }
+  if (caBase64) {
+    requireControl(caBase64.length <= 131072 && /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(caBase64), "DATABASE_CA_ENCODING_INVALID");
+    const decoded = Buffer.from(caBase64, "base64");
+    requireControl(decoded.toString("base64") === caBase64, "DATABASE_CA_ENCODING_INVALID");
+    certificate = decoded.toString("utf8");
+  } else {
+    try { certificate = await readFile(caFile!, "utf8"); }
+    catch { throw new DomainError("DATABASE_CA_UNREADABLE"); }
+  }
   requireControl(!certificate.includes("PRIVATE KEY"), "DATABASE_CA_MUST_NOT_CONTAIN_PRIVATE_KEY");
   const blocks = certificate.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g);
   requireControl(blocks && blocks.length > 0, "DATABASE_CA_INVALID");
+  requireControl(certificate.replace(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g, "").trim() === "", "DATABASE_CA_INVALID");
   for (const block of blocks) {
     let parsed: X509Certificate;
     try { parsed = new X509Certificate(block); }
@@ -35,7 +46,8 @@ export async function databaseConfig(env: NodeJS.ProcessEnv = process.env, purpo
   return {
     connectionString: target.toString(),
     ssl: { ca: certificate, rejectUnauthorized: true, minVersion: "TLSv1.2", servername: target.hostname, checkServerIdentity },
-    max: 10, connectionTimeoutMillis: 10000, statement_timeout: 10000, query_timeout: 12000,
+    ...(purpose === "runtime" ? runtimePoolSettings(env) : { max: 1 }),
+    connectionTimeoutMillis: 3000, statement_timeout: 10000, query_timeout: 12000,
     application_name: purpose === "admin" ? "nobles-credit-migration" : "nobles-credit-engine"
   };
 }
@@ -58,7 +70,7 @@ export async function deploymentDatabaseConfig(env: NodeJS.ProcessEnv = process.
   requireControl(username === (method === "direct" ? role : role + "." + project), "DATABASE_USERNAME_TARGET_MISMATCH");
   requireControl(method === "direct" ? target.hostname === "db." + project + ".supabase.co" : /^aws-[0-9]+-[a-z0-9-]+\.pooler\.supabase\.com$/.test(target.hostname), "DATABASE_HOST_TARGET_MISMATCH");
   if (env.SUPABASE_URL) requireControl(env.SUPABASE_URL === "https://" + project + ".supabase.co", "AUTH_DATABASE_PROJECT_MISMATCH");
-  if (purpose === "runtime") requireControl(!env.DATABASE_ADMIN_URL && !env.DATABASE_ADMIN_SSL_CA_FILE, "ADMIN_CREDENTIALS_IN_RUNTIME_FORBIDDEN");
+  if (purpose === "runtime") requireControl(!env.DATABASE_ADMIN_URL && !env.DATABASE_ADMIN_SSL_CA_FILE && !env.DATABASE_ADMIN_SSL_CA_BASE64, "ADMIN_CREDENTIALS_IN_RUNTIME_FORBIDDEN");
   return config;
 }
 

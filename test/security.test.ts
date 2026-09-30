@@ -18,8 +18,8 @@ test("inactive and unassigned actors cannot access a case", () => {
   assert.throws(() => assertCaseAccess(actor("CREDIT_OFFICER", "unassigned"), creditCase));
   assert.throws(() => authorize({ ...actor("CREDIT_APPROVER"), active: false }, "DECIDE"));
 });
-test("approved matrix denies unresolved officer intake and uncertified agent capture", () => {
-  assert.throws(() => authorize(actor("CREDIT_OFFICER"), "CAPTURE"), /FORBIDDEN/);
+test("approved officer intake is allowed while uncertified agent capture stays denied", () => {
+  authorize(actor("CREDIT_OFFICER"), "CAPTURE");
   assert.throws(() => authorize(actor("CERTIFIED_FIELD_AGENT"), "CAPTURE"), /FORBIDDEN/);
   for (const role of ROLES.filter(role => role !== "COMPLIANCE_CONTROL")) assert.throws(() => authorize(actor(role), "REPORT"), /FORBIDDEN|MEMBER_ROLE_CONFLICT/);
 });

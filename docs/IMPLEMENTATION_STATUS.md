@@ -1,5 +1,7 @@
 # Implementation status - 8 September 2026
 
+Current evidence and blockers: `PRODUCTION_READINESS_2026-09-28.md`. Both production HTTPS roots are reachable, but auth and health routes return 404 and root content matches the old committed shell. CEO/admin/readiness changes remain uncommitted/unpushed. Local tests/build and verified-TLS runtime DB checks pass; migrations 001-006 match. No usable published readiness policies are visible; public Supabase signup remains enabled. No CEO invitation was sent or production account changed in this audit. The dated snapshots below are historical, not current deployment certification.
+
 Latest scope update: Minerva is deferred, with standalone encrypted draft capture/list/resume implemented behind the existing approved intake roles. See `STANDALONE_OPERATION.md` and `DATABASE_CREDENTIALS.md`. The original historical acceptance table below is not a new release certification. Manual verification, full workflows, reports and offline synchronization remain incomplete; no production migrations were executed.
 
 The sections below are historical. Current 18 September changes and remaining failures are in `BACKEND_READINESS_2026-09-18.md`, `AUTHENTICATION.md` and `PERMISSIONS_REVIEW.md`. Supabase Auth is selected and implemented but not configured/activated; the matrix was approved with unresolved actions denied. Database authentication now succeeds, but runtime role/schema gates remain blocked. No production write or migration occurred.

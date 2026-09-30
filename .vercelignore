@@ -1,0 +1,17 @@
+.env
+.env.*
+**/.env
+**/.env.*
+certs/
+**/*.pem
+**/*.crt
+**/*.key
+.git/
+.vercel/
+.codex/
+.agents/
+.build/
+dist/
+coverage/
+node_modules/
+**/*.log

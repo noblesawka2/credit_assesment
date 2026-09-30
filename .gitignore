@@ -9,3 +9,4 @@ certs/
 coverage/
 *.log
 .build/
+.vercel/

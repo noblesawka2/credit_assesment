@@ -9,17 +9,21 @@ export interface StaffAuthProvider {
   recover(email: string, token: string): Promise<ProviderSession>;
   resetPassword(accessToken: string, password: string): Promise<void>;
   signOut(accessToken: string, global: boolean): Promise<void>;
+  inviteSession?(tokenHash: string): Promise<ProviderSession>;
+  finishInvitation?(accessToken: string, password: string, actorId: string): Promise<void>;
 }
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function staffActor(user: Record<string, unknown>, now = Date.now()): Actor {
-  const metadata = user.app_metadata as { nobles?: { active?: boolean; staff?: boolean; roles?: unknown } } | undefined;
+  const metadata = user.app_metadata as { nobles?: { active?: boolean; staff?: boolean; roles?: unknown; staffId?: unknown; invitationPending?: unknown } } | undefined;
   const roles = metadata?.nobles?.roles;
   requireControl(typeof user.id === "string" && uuid.test(user.id) && !user.deleted_at && !user.is_anonymous, "AUTHENTICATION_FAILED");
   requireControl(!user.banned_until || (typeof user.banned_until === "string" && Date.parse(user.banned_until) <= now), "AUTHENTICATION_FAILED");
   requireControl(Boolean(user.email_confirmed_at) && metadata?.nobles?.active === true && metadata.nobles.staff === true, "AUTHENTICATION_FAILED");
+  requireControl(metadata.nobles.invitationPending !== true, "AUTHENTICATION_FAILED");
+  requireControl(metadata.nobles.staffId === undefined || (typeof metadata.nobles.staffId === "string" && /^[A-Z0-9_-]{3,40}$/.test(metadata.nobles.staffId)), "AUTHENTICATION_FAILED");
   requireControl(Array.isArray(roles) && roles.length > 0 && roles.every(role => typeof role === "string" && role !== "MEMBER" && ROLES.includes(role as Role)), "AUTHENTICATION_FAILED");
-  return { id: user.id, active: true, roles: [...new Set(roles)] as Role[], capabilities: [] };
+  return { id: user.id, active: true, roles: [...new Set(roles)] as Role[], staffId: metadata.nobles.staffId as string | undefined, capabilities: [] };
 }
 
 export class SupabaseStaffAuth implements StaffAuthProvider {
@@ -70,5 +74,43 @@ export class SupabaseStaffAuth implements StaffAuthProvider {
   }
   async recover(email: string, token: string) { return this.session(await this.call("/verify", "POST", { email, token, type: "recovery" })); }
   async resetPassword(accessToken: string, password: string) { await this.call("/user", "PUT", { password }, accessToken); }
+  async directory() {
+    const users: Record<string, unknown>[] = [];
+    for (let page = 1; page <= 100; page++) {
+      const result = await this.call("/admin/users?page=" + page + "&per_page=100", "GET", undefined, this.adminKey, true);
+      requireControl(Array.isArray(result.users), "AUTH_SERVICE_UNAVAILABLE");
+      users.push(...result.users);
+      if (result.users.length < 100) return users;
+    }
+    throw new DomainError("STAFF_DIRECTORY_LIMIT_REACHED");
+  }
+  async prepareStaff(email: string, metadata: Record<string, unknown>) {
+    const result = await this.call("/admin/users", "POST", { email, email_confirm: false, app_metadata: { nobles: metadata } }, this.adminKey, true);
+    requireControl(typeof result.id === "string" && uuid.test(result.id), "AUTH_SERVICE_UNAVAILABLE");
+    return result.id;
+  }
+  async sendInvitation(email: string, callback: string) {
+    await this.call("/invite?redirect_to=" + encodeURIComponent(callback), "POST", { email }, this.adminKey, true);
+  }
+  async inviteSession(tokenHash: string): Promise<ProviderSession> {
+    const result = await this.call("/verify", "POST", { token_hash: tokenHash, type: "invite" });
+    requireControl(typeof result.access_token === "string" && typeof result.expires_in === "number" && result.expires_in > 0, "AUTHENTICATION_FAILED");
+    const user = await this.call("/user", "GET", undefined, result.access_token);
+    requireControl(typeof user.id === "string" && uuid.test(user.id), "AUTHENTICATION_FAILED");
+    const current = await this.call("/admin/users/" + user.id, "GET", undefined, this.adminKey, true);
+    const metadata = current.app_metadata as { nobles?: Record<string, unknown> };
+    requireControl(current.id === user.id && metadata?.nobles?.invitationPending === true && Boolean(current.invited_at), "AUTHENTICATION_FAILED");
+    const actor = staffActor({ ...current, app_metadata: { ...metadata, nobles: { ...metadata.nobles, invitationPending: false } } });
+    return { actor, accessToken: result.access_token, expiresAt: Date.now() + Math.min(result.expires_in, 3600) * 1000 };
+  }
+  async finishInvitation(accessToken: string, password: string, actorId: string) {
+    const current = await this.call("/admin/users/" + actorId, "GET", undefined, this.adminKey, true);
+    const metadata = current.app_metadata as { nobles?: Record<string, unknown> };
+    requireControl(current.id === actorId && metadata?.nobles?.invitationPending === true, "AUTHENTICATION_FAILED");
+    staffActor({ ...current, app_metadata: { ...metadata, nobles: { ...metadata.nobles, invitationPending: false } } });
+    await this.resetPassword(accessToken, password);
+    await this.signOut(accessToken, true);
+    await this.call("/admin/users/" + actorId, "PUT", { app_metadata: { ...metadata, nobles: { ...metadata.nobles, invitationPending: false } } }, this.adminKey, true);
+  }
   async signOut(accessToken: string, global: boolean) { await this.call("/logout?scope=" + (global ? "global" : "local"), "POST", undefined, accessToken); }
 }

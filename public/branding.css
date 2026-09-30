@@ -1,0 +1,14 @@
+:root{color:#261433;background:#fff;--nobles-purple:#6200a8;--nobles-gold:#ffb000}
+body,main,aside,header,.workspace,.card,.notice,.field input,.field select,.field textarea,nav a[aria-current=step],.empty{background:#fff;color:#261433}
+a{color:#6200a8}.brand small,.eyebrow{color:#6200a8}.brand-logo{width:58px;height:58px;object-fit:contain;border-radius:8px}
+header,aside,.card,footer{border-color:#e5dcec}.card{box-shadow:0 3px 20px #35104b08}
+nav a[aria-current=step]{border-left:3px solid #ffb000;color:#6200a8}.notice{border-color:#ffb000;border-left-width:4px;color:#543d10}
+.actions button,.actions a,form button,#sign-out{background:#6200a8;color:#fff;border:1px solid #6200a8;border-radius:8px;padding:11px 20px;cursor:pointer}
+.actions .secondary{background:#fff;color:#6200a8;border-color:#6200a8}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #6200a8;outline-offset:3px}
+progress{accent-color:#6200a8}.heading>p:last-child,.help,.empty p,footer{color:#65596d}
+.auth-main,.dashboard-main{max-width:1100px;margin:auto}form.card label{display:grid;gap:6px;margin-bottom:16px}
+form.card input,form.card select{padding:12px;border:1px solid #b7a9c2;border-radius:7px;background:#fff;color:#261433}
+.metric{font-size:32px;font-weight:700;color:#6200a8}.metric small{display:block;font-size:13px;font-weight:400;color:#65596d}
+[hidden]{display:none!important}table{border-collapse:collapse;width:100%;background:#fff}th,td{text-align:left;padding:12px;border-bottom:1px solid #e5dcec;overflow-wrap:anywhere}.table-wrap{overflow-x:auto}
+@media(max-width:600px){.brand-logo{width:42px;height:42px}}

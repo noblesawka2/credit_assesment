@@ -1,21 +1,21 @@
 import type { Pool } from "pg";
 import { requireControl } from "../domain/validation.ts";
 
-export async function assertRuntimeDatabase(pool: Pool) {
+export async function assertRuntimeDatabase(pool: Pick<Pool, "query">, role?: string) {
   const result = await pool.query(`SELECT
-    EXISTS (SELECT 1 FROM pg_roles WHERE pg_has_role(current_user, oid, 'MEMBER')
+    EXISTS (SELECT 1 FROM pg_roles WHERE pg_has_role(COALESCE($1::name,current_user), oid, 'MEMBER')
       AND (rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb OR rolreplication)) AS privileged_role,
-    has_database_privilege(current_user, current_database(), 'CREATE') OR
+    has_database_privilege(COALESCE($1::name,current_user), current_database(), 'CREATE') OR
     EXISTS (SELECT 1 FROM pg_namespace WHERE nspname IN ('public', 'nobles_security')
-      AND (pg_has_role(current_user, nspowner, 'MEMBER') OR has_schema_privilege(current_user, oid, 'CREATE'))) AS schema_control,
+      AND (pg_has_role(COALESCE($1::name,current_user), nspowner, 'MEMBER') OR has_schema_privilege(COALESCE($1::name,current_user), oid, 'CREATE'))) AS schema_control,
     EXISTS (SELECT 1 FROM pg_class JOIN pg_namespace ON pg_namespace.oid=relnamespace
       WHERE relkind IN ('r','p') AND ((nspname='public' AND left(relname,7)='credit_') OR nspname='nobles_security')
-      AND (pg_has_role(current_user, relowner, 'MEMBER') OR has_table_privilege(current_user, pg_class.oid, 'TRUNCATE')
-        OR (nspname='public' AND has_table_privilege(current_user, pg_class.oid, 'DELETE'))
-        OR (relname IN ('credit_audit_logs','events') AND (has_table_privilege(current_user, pg_class.oid, 'UPDATE') OR has_table_privilege(current_user, pg_class.oid, 'DELETE'))))) AS unsafe_table_privileges,
+      AND (pg_has_role(COALESCE($1::name,current_user), relowner, 'MEMBER') OR has_table_privilege(COALESCE($1::name,current_user), pg_class.oid, 'TRUNCATE')
+        OR (nspname='public' AND has_table_privilege(COALESCE($1::name,current_user), pg_class.oid, 'DELETE'))
+        OR (relname IN ('credit_audit_logs','credit_verified_revisions','credit_manual_verifications','credit_assessment_snapshots','credit_repayment_outcomes','credit_readiness_results','events','staff_admin_audit') AND (has_table_privilege(COALESCE($1::name,current_user), pg_class.oid, 'UPDATE') OR has_any_column_privilege(COALESCE($1::name,current_user), pg_class.oid, 'UPDATE') OR has_table_privilege(COALESCE($1::name,current_user), pg_class.oid, 'DELETE'))))) AS unsafe_table_privileges,
     EXISTS (SELECT 1 FROM pg_class JOIN pg_namespace ON pg_namespace.oid=relnamespace
       WHERE nspname='public' AND left(relname,7)='credit_' AND relkind IN ('r','p')
-      AND (NOT relrowsecurity OR NOT relforcerowsecurity)) AS missing_rls`);
+      AND (NOT relrowsecurity OR NOT relforcerowsecurity)) AS missing_rls`, [role ?? null]);
   const row = result.rows[0];
   requireControl(row?.privileged_role === false, "RLS_BYPASS_OR_PRIVILEGED_ROLE_FORBIDDEN");
   requireControl(row.schema_control === false && row.unsafe_table_privileges === false, "RUNTIME_DDL_OR_DESTRUCTIVE_PRIVILEGES_FORBIDDEN");

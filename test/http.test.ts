@@ -6,6 +6,9 @@ import { readFile } from "node:fs/promises";
 import type { Actor } from "../src/domain/access.ts";
 import type { DraftRepository } from "../src/server/repository.ts";
 import { coreAdapter } from "../src/integration/core.ts";
+import type { ManualVerificationRepository } from "../src/server/manual-verification.ts";
+import type { StaffAuthentication } from "../src/server/staff-auth.ts";
+import { DomainError } from "../src/domain/validation.ts";
 test("HTTP shell exposes no real data and unauthenticated API is blocked", async () => {
   const server = createApp({ origin: "http://127.0.0.1:3100" });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -44,7 +47,7 @@ test("standalone staff drafts never fabricate a member ID and retain authorizati
   const post = () => fetch(origin + "/api/drafts", { method: "POST", headers: { Origin: configuredOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ memberNumber: "MEMBER-CLAIM", fullNameClaim: "Unverified claim", requestedAmountKobo: "10000", answers: { memberNumber: "CONFLICTING-CLAIM" }, idempotencyKey: id }) });
   try {
     const health = await fetch(origin + "/api/health").then(response => response.json());
-    assert.equal(health.verificationMode, "STANDALONE"); assert.equal(health.coreConfigured, false); assert.equal(health.submissionEnabled, false);
+    assert.equal(health.status, "UNAVAILABLE"); assert.equal(health.surface, "local"); assert.equal(health.submissionEnabled, false);
     let response = await post(); assert.equal(response.status, 200);
     assert.equal((await response.json()).verificationStatus, "PENDING_MANUAL_VERIFICATION");
     assert.equal((await fetch(origin + "/api/drafts/" + id)).status, 200);
@@ -78,4 +81,73 @@ test("offline shell excludes API, query strings and all submitted payloads", asy
   assert.match(worker, /url\.search/); assert.match(worker, /event\.request\.method !== "GET"/);
   const app = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
   assert.ok(!/localStorage|sessionStorage|console\.log/.test(app));
+});
+
+test("manual verification routes validate sessions, role, origin and case scope server-side", async () => {
+  const actor: Actor = { id: "11111111-1111-4111-8111-111111111111", roles: ["CREDIT_OFFICER"], active: true, capabilities: [] };
+  const caseId = "22222222-2222-4222-8222-222222222222";
+  const configuredOrigin = "http://localhost:3100";
+  let signedIn = false;
+  let scopeAllowed = true;
+  let validations = 0;
+  let writes = 0;
+  const limits: string[] = [];
+  const audits: string[] = [];
+  const auth = {
+    async authenticate() { validations++; return signedIn ? actor : null; },
+    async rateLimit(_request: unknown, category: string) { limits.push(category); },
+    async audit(action: string) { audits.push(action); },
+    clearCookie() {}
+  } as unknown as StaffAuthentication;
+  const verification = {
+    async list(received: Actor) { assert.equal(received.id, actor.id); return []; },
+    async read(received: Actor, id: string) {
+      assert.equal(received.id, actor.id); assert.equal(id, caseId);
+      if (!scopeAllowed) throw new DomainError("CASE_NOT_FOUND");
+      return { id };
+    },
+    async record(received: Actor, id: string, body: unknown) {
+      assert.equal(received.id, actor.id); assert.equal(id, caseId); assert.deepEqual(body, { revision: 1 });
+      writes++; return { id, revision: 2 };
+    }
+  } as unknown as ManualVerificationRepository;
+  const server = createApp({ origin: configuredOrigin, staffAuth: auth, verification });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const origin = "http://127.0.0.1:" + (server.address() as AddressInfo).port;
+  const post = (requestOrigin = configuredOrigin) => fetch(origin + "/api/verifications/" + caseId, {
+    method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ revision: 1 })
+  });
+  try {
+    assert.equal((await fetch(origin + "/api/verifications")).status, 401);
+    assert.equal((await post()).status, 401);
+    signedIn = true;
+    assert.equal((await fetch(origin + "/api/session").then(response => response.json())).canVerify, true);
+    assert.equal((await fetch(origin + "/api/verifications")).status, 200);
+    assert.equal((await fetch(origin + "/api/verifications/" + caseId)).status, 200);
+    assert.equal((await post("https://attacker.invalid")).status, 403);
+    assert.equal((await post()).status, 200);
+    assert.equal(writes, 1);
+    assert.equal((await fetch(origin + "/api/verifications/not-a-uuid")).status, 400);
+    scopeAllowed = false;
+    assert.equal((await fetch(origin + "/api/verifications/" + caseId)).status, 404);
+    for (const role of ["OPERATIONS_CHECKER", "CREDIT_APPROVER", "ASSISTED_INTAKE", "COMPLIANCE_CONTROL"] as const) {
+      actor.roles = [role];
+      assert.equal((await fetch(origin + "/api/session").then(response => response.json())).canVerify, false);
+      assert.equal((await fetch(origin + "/api/verifications")).status, 403);
+      assert.equal((await post()).status, 403);
+    }
+    assert.equal(writes, 1);
+    assert.ok(validations >= 20);
+    assert.ok(limits.includes("verification"));
+    assert.ok(audits.includes("AUTHORIZATION_DENIED"));
+    signedIn = false;
+    assert.equal((await fetch(origin + "/api/verifications/" + caseId)).status, 401);
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test("verification shell does not persist sensitive data or enable offline capture", async () => {
+  const source = await readFile(new URL("../public/verification.js", import.meta.url), "utf8");
+  assert.ok(!/localStorage|sessionStorage|indexedDB|console\.log/.test(source));
+  assert.match(source, /no-store/);
+  assert.match(source, /offline/);
 });

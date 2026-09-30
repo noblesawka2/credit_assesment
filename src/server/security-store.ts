@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { requireControl } from "../domain/validation.ts";
 
-export const SECURITY_EVENTS = ["LOGIN_SUCCESS", "LOGIN_FAILURE", "SIGN_OUT", "SESSION_REJECTED", "PASSWORD_RESET_REQUESTED", "PASSWORD_RESET_DELIVERY_FAILED", "PASSWORD_RESET_STARTED", "PASSWORD_RESET_SUCCESS", "PASSWORD_RESET_FAILURE", "AUTHORIZATION_DENIED", "RATE_LIMITED", "SENSITIVE_ACCESS"] as const;
+export const SECURITY_EVENTS = ["LOGIN_SUCCESS", "LOGIN_FAILURE", "SIGN_OUT", "SESSION_REJECTED", "PASSWORD_RESET_REQUESTED", "PASSWORD_RESET_DELIVERY_FAILED", "PASSWORD_RESET_STARTED", "PASSWORD_RESET_SUCCESS", "PASSWORD_RESET_FAILURE", "AUTHORIZATION_DENIED", "RATE_LIMITED", "SENSITIVE_ACCESS", "INVITATION_ACCEPTANCE_STARTED", "INVITATION_ACCEPTED", "INVITATION_ACCEPTANCE_FAILED", "OVERVIEW_READ"] as const;
 export interface SecurityEvent { action: typeof SECURITY_EVENTS[number]; actorId?: string; correlationId: string }
 export interface StoredSession { hash: string; actorId: string; ciphertext: string; expiresAt: number; startedAt: number }
 export interface SecurityStore {

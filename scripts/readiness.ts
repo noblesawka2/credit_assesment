@@ -8,7 +8,7 @@ const checks = [
   { name: "environment", file: "src/server/environment.ts:4", run: () => applicationEnvironment() },
   { name: "database_configuration", file: "src/server/database.ts:46", run: () => deploymentDatabaseConfig() },
   { name: "authentication_configuration", file: "src/server/supabase-auth.ts:33", run: () => new SupabaseStaffAuth(process.env) },
-  { name: "authentication_activation", file: "src/server/start.ts:24", run: () => {
+  { name: "authentication_activation", file: "src/server/runtime.ts:21", run: () => {
     if (process.env.AUTH_ENABLED !== "true") throw new DomainError("AUTHENTICATION_NOT_ENABLED");
   } },
   { name: "encryption_round_trip", file: "src/server/encryption.ts:6", run: () => {

@@ -1,6 +1,6 @@
 # Backup, recovery and rollback — deployment gate
 
-No backup location, retention, tested restore point or named recovery operator was supplied. This is a controlled procedure, NOT evidence that a backup exists. No backup, restore or migration command was executed.
+No backup location, retention, tested restore point or named recovery operator was supplied. This is a controlled procedure, NOT evidence that a backup exists. No backup or restore command was executed. The user-authorized additive migration bundle was applied on 24 September 2026; see `RELEASE_STATUS_2026-09-24.md`. Its rollback-only rehearsal does not establish backup recoverability or replace an isolated staging drill.
 
 ## Ownership and targets requiring approval
 
@@ -30,4 +30,4 @@ Keep an immutable previous application artifact and reviewed configuration. If n
 
 ## Bad migration
 
-No migration is authorized now. Before any future migration: review exact SQL/checksum/destructiveness, prove backup/restore, rehearse on isolated staging and obtain explicit production approval. A failed transaction rolls back; inspect catalog/ledger to verify no partial external effects. After commit, preserve data/audit and prefer a reviewed additive forward repair. Roll back the application only when backward compatible. For destructive/corrupting changes restore to a separate instance using the above procedure and reconcile post-backup writes. There is no safe generic DROP/down migration; never delete submitted cases/audit to undo deployment.
+The initial additive bundle was authorized and applied. Before any further migration: review exact SQL/checksum/destructiveness, prove backup/restore, rehearse on isolated staging and confirm production approval covers it. A failed transaction rolls back; if the connection is lost around COMMIT, inspect the ledger through a new verified connection before retrying. After commit, preserve data/audit and prefer a reviewed additive forward repair. Roll back the application only when backward compatible. For destructive/corrupting changes restore to a separate instance using the above procedure and reconcile post-backup writes. There is no safe generic DROP/down migration; never delete submitted cases/audit to undo deployment.

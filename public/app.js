@@ -83,7 +83,17 @@ function render() {
   if (staff) {
     document.querySelector("#title").textContent = "Staff workspace";
     const card = element("div", null, "card");
-    card.append(element("h2", "Online draft capture"), element("p", "Minerva is not required for draft capture. Membership, KYC and exposure remain unverified. Appraisal, submission and approval are not enabled."));
+    if (session?.canAdminister) {
+      const link = element("a", "CEO overview and staff administration"); link.href = "/credit/admin"; card.append(link);
+    }
+    if (session?.canAssessReadiness) {
+      const link = element("a", "Evaluate customer credit readiness"); link.href = "/credit/readiness"; card.append(link);
+    }
+    if (session?.canVerify) {
+      const verification = element("a", "Open assigned-case manual verification");
+      verification.href = "/credit/verification"; card.append(verification);
+    }
+    card.append(element("h2", "Customer credit readiness"), element("p", "Capture the customer's information, then evaluate readiness using published policies. Minerva is optional. Preliminary results do not replace verification or approve a loan."));
     if (ready) {
       const refresh = element("button", "Load my authorized drafts", "secondary");
       const list = element("div");
@@ -142,7 +152,7 @@ try {
   const health = await fetch("/api/health", { cache: "no-store" }).then(response => response.json());
   const response = await fetch("/api/session", { cache: "no-store" });
   if (response.ok) session = await response.json();
-  ready = Boolean(session?.canCapture && health.identityConfigured && health.databaseConfigured);
+  ready = Boolean(session?.canCapture && health.status === "AVAILABLE");
   document.querySelector("#setup").textContent = ready ? "Authenticated draft capture; Minerva is optional. All claims require verification. Final submission and loan decisions remain disabled." : "Implementation preview - authenticated intake permission and database setup are required. Inputs are disabled. Do not use for real applications.";
 } catch { document.querySelector("#setup").textContent = "Offline shell only. Secure offline capture is not activated. No personal information is stored in the shell cache."; }
 render();

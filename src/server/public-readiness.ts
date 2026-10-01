@@ -1,8 +1,8 @@
 import type { Pool, PoolClient } from 'pg';
 import { validateProduct } from '../domain/diagnostic.ts';
 import type { ProductMathConfig } from '../domain/money.ts';
-import { parsePublicReadinessInput, publicReadinessAssessment, publicReadinessPolicy } from '../domain/public-readiness.ts';
-import { DomainError, money, requireControl } from '../domain/validation.ts';
+import { assertPublicReadinessShape, parsePublicReadinessInput, publicReadinessAssessment, publicReadinessPolicy } from '../domain/public-readiness.ts';
+import { DomainError, money } from '../domain/validation.ts';
 
 const productMoney = ['minimumPrincipalKobo', 'maximumPrincipalKobo', 'principalIncrementKobo', 'spreadFixedChargesKobo', 'fixedPeriodicObligationKobo', 'deductedFromProceedsFixedKobo'] as const;
 
@@ -81,11 +81,11 @@ export class PublicReadinessRepository {
   }
 
   async evaluate(body: Record<string, unknown>) {
-    requireControl(typeof body.productCode === 'string' && /^[A-Z0-9_-]{1,50}$/.test(body.productCode), 'INVALID_PRODUCT_CODE');
+    assertPublicReadinessShape(body);
     const client = await this.pool.connect();
     try {
       await this.begin(client);
-      const rows = await this.current(client, body.productCode);
+      const rows = await this.current(client, body.productCode as string);
       const selected = selectedPolicies(rows);
       if (!selected.product || !selected.score || !selected.eligibility) {
         await client.query('COMMIT');

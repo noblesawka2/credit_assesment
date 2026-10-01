@@ -79,6 +79,10 @@ test('public repository calculates in a read-only transaction without storing an
   assert.equal(queries[0], 'BEGIN READ ONLY');
   assert.equal(queries.at(-1), 'COMMIT');
   assert.ok(queries.every(query => !/^\s*(INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP)\b/i.test(query)));
+  let connects = 0;
+  const unavailable = new PublicReadinessRepository({ async connect() { connects++; return client; } } as unknown as pg.Pool);
+  await assert.rejects(unavailable.evaluate({ ...body, bvn: 'must-not-be-accepted' }), /INVALID_PUBLIC_READINESS_INPUT/);
+  assert.equal(connects, 0);
 });
 
 test('public route is staff-only, rate-limited and protected shells require server authentication', async () => {

@@ -104,12 +104,21 @@ export function publicReadinessPolicy(scorePayload: unknown, eligibilityPayload:
   };
 }
 
-export function parsePublicReadinessInput(body: Record<string, unknown>, policy: PublicReadinessPolicy): PublicReadinessInput {
+export function assertPublicReadinessShape(body: Record<string, unknown>) {
   const keys = Object.keys(body);
   requireControl(keys.length === PUBLIC_READINESS_FIELDS.length && keys.every(key => (PUBLIC_READINESS_FIELDS as readonly string[]).includes(key)), 'INVALID_PUBLIC_READINESS_INPUT');
   requireControl(typeof body.productCode === 'string' && /^[A-Z0-9_-]{1,50}$/.test(body.productCode), 'INVALID_PRODUCT_CODE');
-  requireControl(typeof body.purposeCode === 'string' && policy.purposeCodes.includes(body.purposeCode), 'INVALID_PURPOSE');
-  const input = {
+  requireControl(typeof body.purposeCode === 'string' && /^[A-Z0-9_-]{1,50}$/.test(body.purposeCode), 'INVALID_PURPOSE');
+  enumValue(body.incomeType, ['SALARY', 'BUSINESS', 'MIXED', 'OTHER'] as const, 'INVALID_INCOME_TYPE');
+  const amounts = [body.monthlyIncomeKobo, body.monthlyBusinessCostsKobo, body.monthlyHouseholdExpensesKobo, body.monthlyOtherCommitmentsKobo, body.monthlyExistingRepaymentsKobo, body.requestedAmountKobo].map(money);
+  requireControl(amounts[0] > 0n && amounts[5] > 0n, 'INVALID_PUBLIC_READINESS_INPUT');
+  requireControl(amounts[1] <= amounts[0], 'INVALID_BUSINESS_COSTS');
+}
+
+export function parsePublicReadinessInput(body: Record<string, unknown>, policy: PublicReadinessPolicy): PublicReadinessInput {
+  assertPublicReadinessShape(body);
+  requireControl(policy.purposeCodes.includes(body.purposeCode as string), 'INVALID_PURPOSE');
+  const input: PublicReadinessInput = {
     productCode: body.productCode,
     purposeCode: body.purposeCode,
     incomeType: enumValue(body.incomeType, ['SALARY', 'BUSINESS', 'MIXED', 'OTHER'] as const, 'INVALID_INCOME_TYPE'),
@@ -119,13 +128,11 @@ export function parsePublicReadinessInput(body: Record<string, unknown>, policy:
     monthlyOtherCommitmentsKobo: money(body.monthlyOtherCommitmentsKobo),
     monthlyExistingRepaymentsKobo: money(body.monthlyExistingRepaymentsKobo),
     requestedAmountKobo: money(body.requestedAmountKobo)
-  };
-  requireControl(input.monthlyIncomeKobo > 0n && input.requestedAmountKobo > 0n, 'INVALID_PUBLIC_READINESS_INPUT');
+  } as PublicReadinessInput;
   for (const value of [input.monthlyIncomeKobo, input.monthlyBusinessCostsKobo, input.monthlyHouseholdExpensesKobo, input.monthlyOtherCommitmentsKobo, input.monthlyExistingRepaymentsKobo]) {
     requireControl(value <= policy.maximumMonthlyAmountKobo, 'PUBLIC_READINESS_INPUT_OUT_OF_RANGE');
   }
   requireControl(input.requestedAmountKobo <= policy.maximumRequestedAmountKobo, 'PUBLIC_READINESS_INPUT_OUT_OF_RANGE');
-  requireControl(input.monthlyBusinessCostsKobo <= input.monthlyIncomeKobo, 'INVALID_BUSINESS_COSTS');
   return input;
 }
 

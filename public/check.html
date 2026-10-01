@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="A private, preliminary Nobles credit readiness self-check.">
+  <title>Credit readiness check | Nobles Cooperative</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/branding.css">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/check.js" defer></script>
+</head>
+<body class="public-check">
+  <a class="skip" href="#main">Skip to the readiness check</a>
+  <header>
+    <a class="brand" href="/check" aria-label="Nobles Cooperative credit readiness home">
+      <img class="brand-logo" src="/nobles-logo.png" alt="">
+      <span>Nobles Cooperative<small>CREDIT READINESS</small></span>
+    </a>
+    <div class="header-actions">
+      <a class="portal-link" href="/credit/auth">Staff sign in</a>
+    </div>
+  </header>
+  <main id="main" class="check-main">
+    <section class="check-hero" aria-labelledby="page-title">
+      <p class="eyebrow">A private preliminary self-check</p>
+      <h1 id="page-title">See how ready you may be before a formal credit assessment.</h1>
+      <p>Answer a few simple money questions. Do not enter your name, member number, BVN, NIN, account details, password, PIN or OTP.</p>
+      <div class="trust-strip" aria-label="Privacy and scope">
+        <span>No sign-in</span><span>No identity details</span><span>No documents</span><span>No data saved</span>
+      </div>
+    </section>
+
+    <section class="check-layout" aria-label="Credit readiness self-check">
+      <aside class="check-guide">
+        <p class="eyebrow">Your progress</p>
+        <ol id="check-steps" class="check-steps">
+          <li aria-current="step">Your need</li>
+          <li>Money coming in</li>
+          <li>Regular expenses</li>
+          <li>Existing repayments</li>
+          <li>Proposed credit</li>
+          <li>Your result</li>
+        </ol>
+        <p class="guide-note">This check is not a loan application, offer, approval or guarantee. A Nobles officer must complete any formal assessment.</p>
+      </aside>
+
+      <div class="check-panel">
+        <div id="policy-status" class="notice" role="status">Checking whether approved readiness policies are available…</div>
+        <form id="public-readiness-form" class="card check-form" novalidate autocomplete="off">
+          <fieldset class="check-step" data-step="0">
+            <legend>What would the credit support?</legend>
+            <p class="step-copy">Choose the closest approved purpose and enter the amount you are considering.</p>
+            <label>Purpose
+              <select id="purpose-code" required disabled>
+                <option value="">Approved purposes will appear here</option>
+              </select>
+            </label>
+            <label>Amount you are considering (₦)
+              <input id="requested-amount" type="number" inputmode="decimal" min="0.01" step="0.01" required placeholder="e.g. 250000">
+            </label>
+          </fieldset>
+
+          <fieldset class="check-step" data-step="1" hidden>
+            <legend>What money comes in each month?</legend>
+            <p class="step-copy">Use a normal month and avoid unusually high one-off income.</p>
+            <label>Main income type
+              <select id="income-type" required>
+                <option value="">Select one</option>
+                <option value="SALARY">Salary or wages</option>
+                <option value="BUSINESS">Business income</option>
+                <option value="MIXED">Salary and business income</option>
+                <option value="OTHER">Other stable income</option>
+              </select>
+            </label>
+            <label>Total monthly income or sales (₦)
+              <input id="monthly-income" type="number" inputmode="decimal" min="0.01" step="0.01" required>
+            </label>
+            <label>Monthly business costs (₦)
+              <input id="business-costs" type="number" inputmode="decimal" min="0" step="0.01" value="0" required>
+              <span class="help">Enter 0 if you do not run a business.</span>
+            </label>
+          </fieldset>
+
+          <fieldset class="check-step" data-step="2" hidden>
+            <legend>What are your regular monthly expenses?</legend>
+            <p class="step-copy">Include realistic household costs and commitments you must pay.</p>
+            <label>Household and living expenses (₦)
+              <input id="household-expenses" type="number" inputmode="decimal" min="0" step="0.01" value="0" required>
+            </label>
+            <label>Other regular commitments (₦)
+              <input id="other-commitments" type="number" inputmode="decimal" min="0" step="0.01" value="0" required>
+            </label>
+          </fieldset>
+
+          <fieldset class="check-step" data-step="3" hidden>
+            <legend>What do you already repay each month?</legend>
+            <p class="step-copy">Add existing loan, hire-purchase and other debt repayments.</p>
+            <label>Existing monthly repayments (₦)
+              <input id="existing-repayments" type="number" inputmode="decimal" min="0" step="0.01" value="0" required>
+            </label>
+          </fieldset>
+
+          <fieldset class="check-step" data-step="4" hidden>
+            <legend>Choose an available Nobles product</legend>
+            <p class="step-copy">Only products backed by approved, effective Nobles policies appear here.</p>
+            <label>Product
+              <select id="product-code" required disabled>
+                <option value="">Approved products will appear here</option>
+              </select>
+            </label>
+            <div class="notice compact">Your result is a policy-based readiness indicator only. It does not verify identity, membership, KYC, exposure, documents or final affordability.</div>
+          </fieldset>
+
+          <section id="check-result" class="check-step result-panel" data-step="5" hidden tabindex="-1" aria-live="polite">
+            <p class="eyebrow">Your preliminary result</p>
+            <h2 id="result-title">Result unavailable</h2>
+            <p id="result-score" class="result-score"></p>
+            <ul id="result-reasons" class="result-reasons"></ul>
+            <p id="result-note">A result will appear only when approved executable Nobles policies are available.</p>
+            <div class="cta-stack">
+              <a class="primary-cta" href="https://mynoblescooperative.com/membership/">Become a Nobles Member</a>
+              <a class="secondary-cta" href="https://wa.me/2349151142355">Speak With a Nobles Officer</a>
+            </div>
+          </section>
+
+          <p id="form-message" role="status"></p>
+          <div class="actions check-actions">
+            <button id="previous-step" class="secondary" type="button" hidden>Back</button>
+            <button id="next-step" type="button">Continue</button>
+            <button id="submit-check" type="submit" hidden disabled>Show my readiness</button>
+            <button id="restart-check" class="secondary" type="button" hidden>Check again</button>
+          </div>
+        </form>
+      </div>
+    </section>
+    <section class="privacy-note">
+      <h2>What this check does — and does not do</h2>
+      <p>It uses only the financial figures you enter for this request. Nobles does not ask for identity details here and does not save these answers. A formal assessment is separate and requires an authorized officer, verified records and applicable approvals.</p>
+    </section>
+  </main>
+  <footer class="public-footer"><span>© Nobles Cooperative</span><span>Preliminary credit readiness only</span></footer>
+</body>
+</html>

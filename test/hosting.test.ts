@@ -81,7 +81,7 @@ for (const surface of ["staff", "administration"] as const) test(surface + " Ver
   const origin = "http://127.0.0.1:" + (server.address() as AddressInfo).port;
   const get = (pathname: string) => fetch(origin + pathname, { headers: { "x-vercel-forwarded-for": "192.0.2.15" } });
   try {
-    const responses = await Promise.all([get("/credit/auth"), get("/api/health"), get("/")]);
+    const responses = await Promise.all([get("/credit/auth"), get("/api/health")]);
     assert.ok(responses.every(response => response.status === 200)); assert.equal(initializes, 1);
     assert.equal(state.listeners.filter(event => event === "release").length, 1);
     assert.match(await responses[0].text(), /auth.js/);
@@ -89,11 +89,16 @@ for (const surface of ["staff", "administration"] as const) test(surface + " Ver
     assert.match(responses[0].headers.get("content-security-policy")!, /frame-ancestors 'none'/);
     const health = await responses[1].json(); assert.equal(health.status, "AVAILABLE"); assert.equal(health.surface, surface); assert.equal(health.productionReady, false);
     assert.doesNotMatch(JSON.stringify(health), /SYNTHETIC|database|supabase|certificate|key|roles/i);
-    assert.match(await responses[2].text(), surface === "administration" ? /CEO administration/ : /app.js/);
+    const check = await get("/check");
+    assert.equal(check.status, surface === "staff" ? 200 : 404);
+    if (surface === "staff") assert.match(await check.text(), /No identity details/);
+    const root = await fetch(origin + "/", { redirect: "manual", headers: { "x-vercel-forwarded-for": "192.0.2.15" } });
+    assert.equal(root.status, 302); assert.equal(root.headers.get("location"), surface === "administration" ? "/credit/admin" : "/check");
     assert.ok(state.queries.every(sql => sql.startsWith("SELECT")));
     assert.equal(state.queries.filter(sql => sql === "SELECT 1").length, 1);
     for (const pathname of ["/.env", "/certs/test.crt", "/src/server/runtime.js", "/node_modules/pg/package.json", "/config/supabase-invite.html"]) assert.equal((await get(pathname)).status, 404);
-    assert.equal((await get("/credit/admin")).status, surface === "staff" ? 404 : 200);
+    assert.equal((await fetch(origin + "/credit/admin", { redirect: "manual", headers: { "x-vercel-forwarded-for": "192.0.2.15" } })).status, surface === "staff" ? 404 : 302);
+    assert.equal((await fetch(origin + "/credit/readiness", { redirect: "manual", headers: { "x-vercel-forwarded-for": "192.0.2.15" } })).status, surface === "administration" ? 404 : 302);
     for (const pathname of ["/api/session", "/api/admin/overview", "/api/drafts", "/api/readiness/config"]) assert.equal((await get(pathname)).status, 401);
     assert.equal((await fetch(origin + "/api/auth/sign-in", { method: "POST", headers: { Origin: "https://attacker.invalid" } })).status, 403);
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); await runtime?.close(); }

@@ -13,6 +13,7 @@ import { requireControl } from "../domain/validation.ts";
 import { ManualVerificationRepository } from "./manual-verification.ts";
 import { StaffAdministration } from "./administration.ts";
 import { ReadinessRepository } from "./readiness.ts";
+import { PublicReadinessRepository } from "./public-readiness.ts";
 import { clientAddressResolver } from "./proxy.ts";
 import { backendHealth } from "./health.ts";
 
@@ -27,6 +28,7 @@ export async function createRuntime(env: NodeJS.ProcessEnv = process.env, poolFa
     let verification: ManualVerificationRepository | undefined;
     let administration: StaffAdministration | undefined;
     let readiness: ReadinessRepository | undefined;
+    let publicReadiness: PublicReadinessRepository | undefined;
     if (env.DATABASE_URL) {
       pool = poolFactory(await deploymentDatabaseConfig(env));
       if (env.VERCEL === "1" && env.VERCEL_ENV !== "development") attachDatabasePool(pool);
@@ -38,6 +40,7 @@ export async function createRuntime(env: NodeJS.ProcessEnv = process.env, poolFa
       requireControl(present.rows[0]?.ready, "APPLICATION_SCHEMA_REQUIRED");
       verification = new ManualVerificationRepository(pool, cipher);
       readiness = new ReadinessRepository(pool, cipher);
+      if (surface !== "administration") publicReadiness = new PublicReadinessRepository(pool);
     }
     if (authEnabled) {
       requireControl(pool, "AUTH_DATABASE_REQUIRED");
@@ -53,7 +56,7 @@ export async function createRuntime(env: NodeJS.ProcessEnv = process.env, poolFa
     const healthCheck = database && staffAuth ? backendHealth(() => database.query(healthQuery)) : async () => false;
     return {
       environment,
-      handler: createRequestHandler({ origin, surface, repository, staffAuth, verification, administration, readiness, healthCheck }),
+      handler: createRequestHandler({ origin, surface, repository, staffAuth, verification, administration, readiness, publicReadiness, healthCheck, releaseCommit: env.VERCEL_GIT_COMMIT_SHA }),
       close: async () => { await database?.end(); }
     };
   } catch (error) {

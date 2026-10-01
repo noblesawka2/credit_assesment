@@ -10,6 +10,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { hostingEnvironment, hostingPool } from "./hosting-fixtures.ts";
 
 test("Vercel artifact runs both isolated surfaces without repository files or build-time secrets", async context => {
+  const vercel = JSON.parse(await readFile(new URL("../vercel.json", import.meta.url), "utf8"));
+  assert.equal(vercel.installCommand, "npm ci --include=dev");
   const canary = "SYNTHETIC_BUILD_ENV_MUST_NOT_BE_PACKAGED_97fc5e";
   const result = spawnSync(process.execPath, [fileURLToPath(new URL("../scripts/build-vercel.ts", import.meta.url))], {
     encoding: "utf8", env: { ...process.env, DATABASE_URL: canary, DATA_ENCRYPTION_KEY: canary, DATABASE_SSL_CA_BASE64: canary }
@@ -27,7 +29,7 @@ test("Vercel artifact runs both isolated surfaces without repository files or bu
   assert.equal(launcher.shouldAddHelpers, false);
   const files = await readdir(bundled, { recursive: true, withFileTypes: true });
   const names = files.map(entry => path.relative(fileURLToPath(bundled), path.join(entry.parentPath, entry.name)).replaceAll("\\", "/"));
-  for (const required of [launcher.handler, "src/server/runtime.js", "public/auth.html", "public/administration.html", "node_modules/pg/package.json", "node_modules/@vercel/functions/db-connections/index.js"]) assert.ok(names.includes(required), required);
+  for (const required of [launcher.handler, "src/server/runtime.js", "public/auth.html", "public/check.html", "public/check.js", "public/administration.html", "node_modules/pg/package.json", "node_modules/@vercel/functions/db-connections/index.js"]) assert.ok(names.includes(required), required);
   assert.ok(!names.some(name => /(^|\/)(\.env[^/]*|certs|test|tests|db|typescript|\.git)(\/|$)|\.(pem|crt|key)$/i.test(name)));
   for (const entry of files.filter(entry => entry.isFile())) {
     const bytes = await readFile(path.join(entry.parentPath, entry.name));
@@ -64,17 +66,24 @@ test("Vercel artifact runs both isolated surfaces without repository files or bu
       const headers = { "x-vercel-forwarded-for": "192.0.2.15" };
       const get = (pathname: string) => fetch(origin + pathname, { headers });
       try {
-        const responses = await Promise.all([get("/"), get("/credit/auth"), get("/api/health")]);
+        const responses = await Promise.all([get("/credit/auth"), get("/api/health")]);
         assert.ok(responses.every(response => response.status === 200));
         assert.equal(initializations, 1);
         assert.equal(state.listeners.filter(event => event === "release").length, 1);
-        assert.match(await responses[0].text(), surface === "administration" ? /CEO administration/ : /app.js/);
-        assert.match(await responses[1].text(), /auth.js/);
-        assert.deepEqual(await responses[2].json(), { service: "Nobles Cooperative", status: "AVAILABLE", surface, productionReady: false, offlineCaptureEnabled: false, submissionEnabled: false });
-        assert.equal(responses[2].headers.get("cache-control"), "no-store");
-        for (const pathname of ["/credit/staff", "/credit/readiness", "/credit/verification", "/auth.js", "/branding.css", "/nobles-logo.png"]) assert.equal((await get(pathname)).status, 200, pathname);
-        assert.equal((await get("/credit/admin")).status, surface === "staff" ? 404 : 200);
-        assert.ok(state.queries.every(query => query.startsWith("SELECT")));
+        assert.match(await responses[0].text(), /auth.js/);
+        assert.deepEqual(await responses[1].json(), { service: "Nobles Cooperative", status: "AVAILABLE", surface, productionReady: false, offlineCaptureEnabled: false, submissionEnabled: false, releaseCommit: null });
+        assert.equal(responses[1].headers.get("cache-control"), "no-store");
+        const root = await fetch(origin + "/", { headers, redirect: "manual" });
+        assert.equal(root.status, 302); assert.equal(root.headers.get("location"), surface === "administration" ? "/credit/admin" : "/check");
+        const check = await get("/check"); assert.equal(check.status, surface === "staff" ? 200 : 404);
+        if (surface === "staff") assert.match(await check.text(), /No identity details/);
+        for (const pathname of ["/auth.js", "/branding.css", "/nobles-logo.png"]) assert.equal((await get(pathname)).status, 200, pathname);
+        for (const pathname of ["/credit/staff", "/credit/readiness", "/credit/verification"]) {
+          const protectedPage = await fetch(origin + pathname, { headers, redirect: "manual" });
+          assert.equal(protectedPage.status, surface === "administration" ? 404 : 302, pathname);
+        }
+        assert.equal((await fetch(origin + "/credit/admin", { headers, redirect: "manual" })).status, surface === "staff" ? 404 : 302);
+        assert.ok(state.queries.every(query => query.startsWith("SELECT") || query.startsWith("INSERT INTO nobles_security.events")));
         for (const pathname of ["/.env", "/.env.migrate", "/.vc-config.json", "/certs/test.crt", "/src/server/vercel.js", "/node_modules/pg/package.json", "/config/supabase-invite.html"]) assert.equal((await get(pathname)).status, 404, pathname);
         for (const pathname of ["/api/session", "/api/admin/overview", "/api/drafts", "/api/readiness/config"]) {
           const response = await get(pathname);
@@ -101,7 +110,7 @@ test("Vercel artifact runs both isolated surfaces without repository files or bu
           assert.equal(response.status, 503);
           assert.equal(response.headers.get("cache-control"), "no-store");
           assert.match(response.headers.get("strict-transport-security")!, /max-age=/);
-          assert.deepEqual(await response.json(), { service: "Nobles Cooperative", status: "UNAVAILABLE", surface: "staff", productionReady: false, offlineCaptureEnabled: false, submissionEnabled: false });
+          assert.deepEqual(await response.json(), { service: "Nobles Cooperative", status: "UNAVAILABLE", surface: "staff", productionReady: false, offlineCaptureEnabled: false, submissionEnabled: false, releaseCommit: null });
         } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
       }
     });

@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
-import { authorize } from "../domain/access.ts";
+import { authorize, type Action } from "../domain/access.ts";
 import { DomainError, integer, requireControl } from "../domain/validation.ts";
 import type { CoreSystemAdapter } from "../integration/core-contract.ts";
 import { unavailableIdentity, type IdentityAdapter } from "./identity.ts";
@@ -10,9 +10,11 @@ import type { Actor } from "../domain/access.ts";
 import type { ManualVerificationRepository } from "./manual-verification.ts";
 import { INVITABLE_ROLES, type StaffAdministration } from "./administration.ts";
 import type { ReadinessRepository } from "./readiness.ts";
+import type { PublicReadinessRepository } from "./public-readiness.ts";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const assets: Record<string, [string, string]> = {
+  "/check.js": ["check.js", "text/javascript"],
   '/fonts/dm-sans-latin.woff2': ['fonts/dm-sans-latin.woff2', 'font/woff2'],
   '/fonts/playfair-display-latin.woff2': ['fonts/playfair-display-latin.woff2', 'font/woff2'],
   '/fonts/space-mono-latin-regular.woff2': ['fonts/space-mono-latin-regular.woff2', 'font/woff2'],
@@ -27,6 +29,10 @@ const assets: Record<string, [string, string]> = {
 function send(response: ServerResponse, status: number, body: unknown) {
   response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(body));
+}
+function redirect(response: ServerResponse, location: string) {
+  response.writeHead(302, { Location: location });
+  response.end();
 }
 async function bodyOf(request: IncomingMessage): Promise<Record<string, unknown>> {
   requireControl(request.headers["content-type"]?.split(";")[0] === "application/json", "JSON_REQUIRED");
@@ -52,7 +58,7 @@ export function securityHeaders(response: ServerResponse, secure: boolean) {
   response.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'");
 }
 
-export interface AppOptions { origin: string; surface?: "staff" | "administration" | "local"; identity?: IdentityAdapter; staffAuth?: StaffAuthentication; core?: CoreSystemAdapter; repository?: DraftRepository; verification?: ManualVerificationRepository; administration?: StaffAdministration; readiness?: ReadinessRepository; healthCheck?: () => Promise<boolean> }
+export interface AppOptions { origin: string; surface?: "staff" | "administration" | "local"; identity?: IdentityAdapter; staffAuth?: StaffAuthentication; core?: CoreSystemAdapter; repository?: DraftRepository; verification?: ManualVerificationRepository; administration?: StaffAdministration; readiness?: ReadinessRepository; publicReadiness?: PublicReadinessRepository; healthCheck?: () => Promise<boolean>; releaseCommit?: string }
 
 export function createRequestHandler(options: AppOptions) {
   const identity = options.staffAuth ?? options.identity ?? unavailableIdentity;
@@ -62,17 +68,43 @@ export function createRequestHandler(options: AppOptions) {
     securityHeaders(response, options.origin.startsWith("https://"));
     try {
       const pathname = new URL(request.url ?? "/", options.origin).pathname;
+      const requirePage = async (action: Action) => {
+        actor = await identity.authenticate(request);
+        if (!actor || !actor.active || !uuid.test(actor.id)) {
+          await options.staffAuth?.audit("AUTHORIZATION_DENIED", actor ?? undefined);
+          options.staffAuth?.clearCookie(response);
+          redirect(response, "/credit/auth");
+          return false;
+        }
+        try { authorize(actor, action); }
+        catch {
+          await options.staffAuth?.audit("AUTHORIZATION_DENIED", actor);
+          options.staffAuth?.clearCookie(response);
+          redirect(response, "/credit/auth");
+          return false;
+        }
+        return true;
+      };
       if (pathname === "/api/health" && request.method === "GET") {
         const available = await Promise.resolve().then(() => options.healthCheck?.() ?? false).catch(() => false);
         return send(response, available ? 200 : 503, {
           service: "Nobles Cooperative", status: available ? "AVAILABLE" : "UNAVAILABLE", surface: options.surface ?? "local",
-          productionReady: false, offlineCaptureEnabled: false, submissionEnabled: false
+          productionReady: false, offlineCaptureEnabled: false, submissionEnabled: false,
+          releaseCommit: options.releaseCommit && /^[a-f0-9]{40}$/i.test(options.releaseCommit) ? options.releaseCommit : null
         });
       }
       if (pathname.startsWith("/api/")) {
         requireControl(request.headers["sec-fetch-site"] !== "cross-site", "FORBIDDEN");
         if (request.method !== "GET") requireControl(request.headers.origin === options.origin, "ORIGIN_REJECTED");
         if (options.staffAuth) await options.staffAuth.rateLimit(request, "api");
+        if (pathname.startsWith("/api/public/readiness")) {
+          requireControl(options.surface !== "administration", "FORBIDDEN");
+          requireControl(options.publicReadiness && options.staffAuth, "SERVICE_UNAVAILABLE");
+          await options.staffAuth.rateLimit(request, "public-readiness");
+          if (pathname === "/api/public/readiness/config" && request.method === "GET") return send(response, 200, await options.publicReadiness.configuration());
+          if (pathname === "/api/public/readiness/evaluate" && request.method === "POST") return send(response, 200, await options.publicReadiness.evaluate(await bodyOf(request)));
+          return send(response, 405, { error: "METHOD_NOT_ALLOWED" });
+        }
         if (pathname.startsWith("/api/auth/")) {
           requireControl(options.staffAuth, "AUTH_SERVICE_UNAVAILABLE");
           const action = pathname.slice("/api/auth/".length);
@@ -176,8 +208,15 @@ export function createRequestHandler(options: AppOptions) {
         return send(response, 404, { error: "NOT_IMPLEMENTED" });
       }
       if (request.method !== "GET") return send(response, 405, { error: "METHOD_NOT_ALLOWED" });
+      if (pathname === "/check") {
+        if (options.surface === "administration") return send(response, 404, { error: "NOT_FOUND" });
+        response.setHeader("Content-Type", "text/html; charset=utf-8");
+        response.end(await readFile(new URL("../../public/check.html", import.meta.url)));
+        return;
+      }
       if (pathname === "/credit/admin" || pathname === "/credit/readiness") {
-        if (pathname === "/credit/admin" && options.surface === "staff") return send(response, 404, { error: "NOT_FOUND" });
+        if (pathname === "/credit/admin" && options.surface === "staff" || pathname === "/credit/readiness" && options.surface === "administration") return send(response, 404, { error: "NOT_FOUND" });
+        if (!await requirePage(pathname === "/credit/admin" ? "STAFF_ADMIN" : "READINESS")) return;
         response.setHeader("Content-Type", "text/html; charset=utf-8");
         response.end(await readFile(new URL("../../public/" + (pathname === "/credit/admin" ? "administration.html" : "readiness.html"), import.meta.url)));
         return;
@@ -188,6 +227,8 @@ export function createRequestHandler(options: AppOptions) {
         return;
       }
       if (pathname === "/credit/verification") {
+        if (options.surface === "administration") return send(response, 404, { error: "NOT_FOUND" });
+        if (!await requirePage("VERIFY")) return;
         response.setHeader("Content-Type", "text/html; charset=utf-8");
         response.end(await readFile(new URL("../../public/verification.html", import.meta.url)));
         return;
@@ -199,9 +240,11 @@ export function createRequestHandler(options: AppOptions) {
         return;
       }
       if (pathname === "/" || pathname === "/credit/staff" || /^\/credit\/apply\/(start|request|income-route|business|sales|business-costs|household|debts|use-of-funds|salary|unity-group|evidence|review)$/.test(pathname)) {
+        if (pathname === "/") return redirect(response, options.surface === "administration" ? "/credit/admin" : "/check");
+        if (options.surface === "administration") return send(response, 404, { error: "NOT_FOUND" });
+        if (!await requirePage("CAPTURE")) return;
         response.setHeader("Content-Type", "text/html; charset=utf-8");
-        const page = options.surface === "administration" && ["/", "/credit/staff"].includes(pathname) ? "administration.html" : "index.html";
-        response.end(await readFile(new URL("../../public/" + page, import.meta.url)));
+        response.end(await readFile(new URL("../../public/index.html", import.meta.url)));
         return;
       }
       send(response, 404, { error: "NOT_FOUND" });

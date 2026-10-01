@@ -38,5 +38,6 @@ test("CEO and readiness HTTP APIs enforce server roles, portal surface and origi
     assert.equal((await fetch(origin+"/.env.migrate")).status,404);
     assert.equal((await fetch(origin+"/config/supabase-invite.html")).status,404);
     const logo=await fetch(origin+"/nobles-logo.png");assert.equal(logo.status,200);assert.match(logo.headers.get("content-type")!,/^image\/png/);
+    const font=await fetch(origin+'/fonts/dm-sans-latin.woff2');assert.equal(font.status,200);assert.match(font.headers.get('content-type')!,/^font\/woff2/);
   }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });

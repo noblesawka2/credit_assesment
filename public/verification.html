@@ -1,20 +1,38 @@
 <!doctype html>
-<html lang="en">
+<html lang='en'>
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="robots" content="noindex,nofollow"><title>Nobles | Manual verification</title>
-  <link rel="stylesheet" href="/style.css"><script type="module" src="/verification.js"></script>
-  <link rel="stylesheet" href="/branding.css"><link rel="icon" href="/nobles-logo.png">
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width,initial-scale=1'>
+  <meta name='robots' content='noindex,nofollow'>
+  <meta name='theme-color' content='#5c008c'>
+  <title>Nobles | Manual verification</title>
+  <link rel='icon' href='/nobles-logo.png'>
+  <link rel='stylesheet' href='/style.css'>
+  <link rel='stylesheet' href='/branding.css'>
+  <script type='module' src='/verification.js'></script>
 </head>
 <body>
-  <header><a class="brand" href="/credit/staff"><img class="brand-logo" src="/nobles-logo.png" alt="">Nobles Cooperative</a><a href="/credit/auth">Sign in / sign out</a></header>
-  <main>
-    <h1>Assigned-case verification</h1>
-    <p class="notice">Record findings against approved Nobles records. These attestations do not approve a loan, replace financial appraisal, or alter original answers. Do not enter passwords, access tokens or full financial credentials.</p>
-    <p id="verification-status" role="status">Checking authenticated officer access…</p>
-    <div class="actions"><button id="load-cases" disabled>Load assigned cases</button></div>
-    <section id="case-list" aria-label="Assigned cases"></section>
-    <section id="case-detail" aria-label="Case and evidence"></section>
+  <header>
+    <a class='brand' href='/credit/staff'>
+      <img class='brand-logo' src='/nobles-logo.png' alt=''>
+      <span>Nobles Cooperative<small>MANUAL VERIFICATION</small></span>
+    </a>
+    <div class='header-actions'>
+      <span class='chip'>Assigned cases</span>
+      <a href='/credit/auth'>Account</a>
+    </div>
+  </header>
+  <main class='dashboard-main'>
+    <div class='page-intro'>
+      <p class='eyebrow'>Controlled manual review</p>
+      <h1>Assigned-case verification</h1>
+      <p>Compare customer claims with approved Nobles records and create an immutable evidence revision for the assigned case.</p>
+    </div>
+    <p class='notice'>These attestations do not approve a loan, replace financial appraisal or alter original answers. Never enter passwords, access tokens or full financial credentials.</p>
+    <p id='verification-status' role='status'>Checking authenticated officer access…</p>
+    <div class='actions'><button id='load-cases' disabled>Load assigned cases</button></div>
+    <section id='case-list' aria-label='Assigned cases'></section>
+    <section id='case-detail' aria-label='Case and evidence'></section>
   </main>
 </body>
 </html>

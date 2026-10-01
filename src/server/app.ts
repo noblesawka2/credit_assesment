@@ -13,6 +13,10 @@ import type { ReadinessRepository } from "./readiness.ts";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const assets: Record<string, [string, string]> = {
+  '/fonts/dm-sans-latin.woff2': ['fonts/dm-sans-latin.woff2', 'font/woff2'],
+  '/fonts/playfair-display-latin.woff2': ['fonts/playfair-display-latin.woff2', 'font/woff2'],
+  '/fonts/space-mono-latin-regular.woff2': ['fonts/space-mono-latin-regular.woff2', 'font/woff2'],
+  '/fonts/space-mono-latin-bold.woff2': ['fonts/space-mono-latin-bold.woff2', 'font/woff2'],
   "/branding.css": ["branding.css", "text/css"], "/nobles-logo.png": ["nobles-logo.png", "image/png"],
   "/administration.js": ["administration.js", "text/javascript"], "/readiness.js": ["readiness.js", "text/javascript"],
   "/app.js": ["app.js", "text/javascript"], "/style.css": ["style.css", "text/css"],
@@ -59,7 +63,7 @@ export function createRequestHandler(options: AppOptions) {
     try {
       const pathname = new URL(request.url ?? "/", options.origin).pathname;
       if (pathname === "/api/health" && request.method === "GET") {
-        const available = await options.healthCheck?.().catch(() => false) ?? false;
+        const available = await Promise.resolve().then(() => options.healthCheck?.() ?? false).catch(() => false);
         return send(response, available ? 200 : 503, {
           service: "Nobles Cooperative", status: available ? "AVAILABLE" : "UNAVAILABLE", surface: options.surface ?? "local",
           productionReady: false, offlineCaptureEnabled: false, submissionEnabled: false

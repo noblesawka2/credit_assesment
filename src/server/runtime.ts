@@ -1,4 +1,5 @@
 import pg from "pg";
+import { attachDatabasePool } from "@vercel/functions/db-connections";
 import { createRequestHandler } from "./app.ts";
 import { PayloadCipher } from "./encryption.ts";
 import { DraftRepository } from "./repository.ts";
@@ -28,6 +29,7 @@ export async function createRuntime(env: NodeJS.ProcessEnv = process.env, poolFa
     let readiness: ReadinessRepository | undefined;
     if (env.DATABASE_URL) {
       pool = poolFactory(await deploymentDatabaseConfig(env));
+      if (env.VERCEL === "1" && env.VERCEL_ENV !== "development") attachDatabasePool(pool);
       pool.on("error", error => process.stderr.write(JSON.stringify({ database: "UNAVAILABLE", code: databaseErrorCode(error) }) + "\n"));
       await assertRuntimeDatabase(pool);
       const cipher = new PayloadCipher(env.DATA_ENCRYPTION_KEY ?? "");

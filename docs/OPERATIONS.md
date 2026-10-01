@@ -1,6 +1,6 @@
 # Local operation, deployment prerequisites and rollback
 
-Latest evidence/deployment gates: `PRODUCTION_READINESS_2026-09-28.md`. Both portal HTTPS roots are reachable, but auth/health return 404; the split project environment settings are user-reported and not yet validated in running backends. Migration 006 is applied; use the six-file release manifest. Keep invitations disabled, do not bootstrap the CEO yet, and do not deploy the whole standalone dist tree as public assets. Local APP_ORIGIN remains local. Earlier hosting assumptions below are historical.
+Local Vercel packaging, runtime configuration and current deployment gates: `VERCEL_BACKEND_2026-09-30.md`. Earlier live checks are dated in `PRODUCTION_READINESS_2026-09-28.md`; the current deployments have not been re-probed in this local task. Keep invitations disabled, do not bootstrap the CEO yet, and never deploy the standalone dist tree as public assets. Local APP_ORIGIN remains local. Earlier hosting assumptions below are historical.
 
 ## Development setup
 
@@ -12,7 +12,7 @@ npm.cmd run build
 npm.cmd run dev
 ```
 
-Bind to `127.0.0.1` for local preview. Do not expose this unfinished application to a public network. This implementation has not been deployed.
+Bind to `127.0.0.1` for local preview. Do not expose this unfinished application to a public network. A push may trigger existing Vercel Git integrations; it is not evidence that the correct backend is deployed or ready.
 
 ## Database migration
 

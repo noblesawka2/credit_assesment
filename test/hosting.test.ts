@@ -18,6 +18,7 @@ const request = (headers: Record<string, string | string[]> = {}, rawHeaders: st
 
 test("proxy identity trusts only validated platform ingress, never arbitrary forwarding chains", () => {
   const local = clientAddressResolver({});
+  assert.throws(() => local({ headers: {}, socket: {} } as IncomingMessage), /INVALID_CLIENT_ADDRESS/);
   assert.equal(local(request({ "x-forwarded-for": "203.0.113.1", "x-vercel-forwarded-for": "203.0.113.2", "x-vercel-id": "spoof" })), "192.0.2.1");
   assert.throws(() => clientAddressResolver({ TRUSTED_PROXY: "vercel" }), /VERCEL_PROXY_RUNTIME_REQUIRED/);
   assert.throws(() => clientAddressResolver({ ...hostingEnvironment("staff"), TRUSTED_PROXY: "none" }), /VERCEL_PROXY_REQUIRED/);
@@ -82,6 +83,7 @@ for (const surface of ["staff", "administration"] as const) test(surface + " Ver
   try {
     const responses = await Promise.all([get("/credit/auth"), get("/api/health"), get("/")]);
     assert.ok(responses.every(response => response.status === 200)); assert.equal(initializes, 1);
+    assert.equal(state.listeners.filter(event => event === "release").length, 1);
     assert.match(await responses[0].text(), /auth.js/);
     assert.equal(responses[0].headers.get("cache-control"), "no-store");
     assert.match(responses[0].headers.get("content-security-policy")!, /frame-ancestors 'none'/);

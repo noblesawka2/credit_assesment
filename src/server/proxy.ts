@@ -23,5 +23,5 @@ export function clientAddressResolver(env: NodeJS.ProcessEnv = process.env): Cli
       return normalize(address);
     };
   }
-  return request => normalize(request.socket.remoteAddress ?? "127.0.0.1");
+  return request => normalize(request.socket.remoteAddress ?? "");
 }

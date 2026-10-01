@@ -1,10 +1,10 @@
-# Implementation status - 8 September 2026
+# Implementation status - 1 October 2026
 
-Current evidence and blockers: `PRODUCTION_READINESS_2026-09-28.md`. Both production HTTPS roots are reachable, but auth and health routes return 404 and root content matches the old committed shell. CEO/admin/readiness changes remain uncommitted/unpushed. Local tests/build and verified-TLS runtime DB checks pass; migrations 001-006 match. No usable published readiness policies are visible; public Supabase signup remains enabled. No CEO invitation was sent or production account changed in this audit. The dated snapshots below are historical, not current deployment certification.
+Current launch-preparation evidence and blockers are in `VERCEL_BACKEND_2026-09-30.md`. The local release now includes Vercel pool lifecycle hardening, fail-closed proxy/health handling, isolated package verification and the exact Nobles website typography/palette across staff, readiness, authentication, verification and administration pages. The user authorised commit and push on 1 October 2026. No explicit deployment, production database request, migration, account/invitation, policy, role or production-data change is part of this work.
 
-Latest scope update: Minerva is deferred, with standalone encrypted draft capture/list/resume implemented behind the existing approved intake roles. See `STANDALONE_OPERATION.md` and `DATABASE_CREDENTIALS.md`. The original historical acceptance table below is not a new release certification. Manual verification, full workflows, reports and offline synchronization remain incomplete; no production migrations were executed.
+Minerva remains deferred, with standalone encrypted draft capture/list/resume and controlled manual verification behind existing approved roles. See `STANDALONE_OPERATION.md`, `DATABASE_CREDENTIALS.md` and `MINERVA_GAPS.md`. Full persisted decision workflows, reports/exports, approved-device offline capture/server synchronization and recovery acceptance remain incomplete. No production migration was executed.
 
-The sections below are historical. Current 18 September changes and remaining failures are in `BACKEND_READINESS_2026-09-18.md`, `AUTHENTICATION.md` and `PERMISSIONS_REVIEW.md`. Supabase Auth is selected and implemented but not configured/activated; the matrix was approved with unresolved actions denied. Database authentication now succeeds, but runtime role/schema gates remain blocked. No production write or migration occurred.
+The sections below are historical snapshots, not current deployment certification. Supabase Auth is the implemented identity provider and the permission matrix is approved with unresolved actions denied. Dashboard URL/template/environment setup is operator-reported complete, but real deployed authentication and email acceptance still require smoke tests with invitations disabled.
 
 Historical implementation snapshot. The 17 September 2026 audit and subsequent TLS-only remediation are documented in `RELEASE_AUDIT_2026-09-17.md`; production database authentication remains blocked and the full application remains incomplete.
 
@@ -61,8 +61,8 @@ There were no existing roles to map. Startup uses a default-deny identity adapte
 
 ## Validation interpretation
 
-Final local validation: **71 tests passed**, `npm.cmd run typecheck` passed, and `npm.cmd run build` passed. The server started successfully on localhost. A headless desktop screenshot was generated, but image inspection was blocked by the host sandbox; visual review and real mobile testing remain outstanding.
+Final local validation on 1 October: **139 tests passed**, TypeScript passed, the standalone production build passed, both isolated Vercel package builds passed, environment/encryption readiness passed and full dependency audit reported zero vulnerabilities. Desktop and mobile browser inspection passed for the primary staff, readiness, authentication and administration surfaces using self-hosted `DM Sans`, `Playfair Display` and `Space Mono`.
 
-Dependency installation completed with exact official archive references for TypeScript 5.9.3, Node 24.3.0 type definitions, and pg 8.15.5 type definitions after full metadata downloads stalled. `package-lock.json` records integrity hashes. No security-audit success is claimed.
+`package-lock.json` records integrity hashes. The full and production-only audits against the official npm registry both reported zero known vulnerabilities at validation time.
 
 Passing unit tests validate the functions they exercise, not the whole specification. SQL files and repository methods have not been executed against a real database. Domain transitions are pure functions, not yet transactional production endpoints. No migration success, production readiness, hardware encryption assurance or complete offline sync is claimed.

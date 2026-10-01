@@ -19,6 +19,7 @@
     "readiness": "node --env-file-if-exists=.env scripts/readiness.ts"
   },
   "dependencies": {
+    "@vercel/functions": "3.9.9",
     "pg": "8.23.0"
   },
   "devDependencies": {

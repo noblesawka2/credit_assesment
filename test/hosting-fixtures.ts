@@ -20,9 +20,10 @@ export function hostingEnvironment(surface: "staff" | "administration"): NodeJS.
 }
 
 export function hostingPool() {
-  const state = { queries: [] as string[], closes: 0, available: true, schemaReady: true, unsafe: false };
+  const state = { queries: [] as string[], listeners: [] as string[], closes: 0, available: true, schemaReady: true, unsafe: false };
   const pool = {
-    on() {},
+    options: { idleTimeoutMillis: 5000 },
+    on(event: string) { state.listeners.push(event); },
     async end() { state.closes++; },
     async query(input: string | { text: string }) {
       const sql = typeof input === "string" ? input : input.text;

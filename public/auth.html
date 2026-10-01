@@ -1,8 +1,69 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Nobles | Staff access</title><link rel="icon" href="/nobles-logo.png"><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/branding.css"><script src="/auth.js" defer></script></head>
-<body><header><a class="brand" href="/"><img class="brand-logo" src="/nobles-logo.png" alt=""><span>Nobles Cooperative<small>SECURE STAFF ACCESS</small></span></a></header><main class="auth-main"><h1>Staff access</h1><p>Invited and authorized staff only. No public registration.</p>
-<form id="accept-invite" class="card" hidden><h2>Set your password</h2><p>Your invitation can be used once. Choose a unique password of at least 12 characters. We never assign shared passwords.</p><label>New password<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></label><label>Confirm password<input name="confirmPassword" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></label><button>Accept invitation and set password</button></form>
-<form id="sign-in" class="card"><h2>Sign in</h2><label>Email<input name="email" type="email" autocomplete="username" required maxlength="254"></label><label>Password<input name="password" type="password" autocomplete="current-password" required maxlength="1024"></label><button>Sign in</button></form>
-<form id="forgot-password" class="card"><h2>Forgot password</h2><label>Email<input name="email" type="email" autocomplete="username" required maxlength="254"></label><button>Send recovery code</button></form>
-<form id="reset-password" class="card"><h2>Reset password</h2><p>Use the one-time recovery code from your email. Expired codes cannot be reused.</p><label>Email<input name="email" type="email" autocomplete="username" required maxlength="254"></label><label>Recovery code<input name="token" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,10}" required></label><label>New password<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></label><button>Reset password</button></form>
-<button id="sign-out" type="button">Sign out</button><p id="auth-status" role="status" aria-live="polite"></p><div class="actions"><a href="/credit/staff">Staff workspace</a><a href="/credit/admin">CEO administration</a></div></main></body></html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width,initial-scale=1'>
+  <meta name='robots' content='noindex,nofollow'>
+  <meta name='theme-color' content='#5c008c'>
+  <title>Nobles | Staff access</title>
+  <link rel='icon' href='/nobles-logo.png'>
+  <link rel='stylesheet' href='/style.css'>
+  <link rel='stylesheet' href='/branding.css'>
+  <script src='/auth.js' defer></script>
+</head>
+<body>
+  <header>
+    <a class='brand' href='/'>
+      <img class='brand-logo' src='/nobles-logo.png' alt=''>
+      <span>Nobles Cooperative<small>SECURE STAFF ACCESS</small></span>
+    </a>
+    <span class='chip'>Invited staff only</span>
+  </header>
+  <main class='auth-main'>
+    <div class='page-intro'>
+      <p class='eyebrow'>Nobles credit readiness</p>
+      <h1>Welcome back.</h1>
+      <p>Sign in to continue an authorised customer assessment. There is no public registration on this platform.</p>
+    </div>
+    <p class='notice'>Access is limited to invited Nobles staff. Readiness results are preliminary and do not approve a loan.</p>
+    <div class='auth-grid'>
+      <form id='accept-invite' class='card' hidden>
+        <h2>Set your password</h2>
+        <p>Your invitation can be used once. Choose a unique password of at least 12 characters. We never assign shared passwords.</p>
+        <label>New password<input name='password' type='password' autocomplete='new-password' minlength='12' maxlength='1024' required></label>
+        <label>Confirm password<input name='confirmPassword' type='password' autocomplete='new-password' minlength='12' maxlength='1024' required></label>
+        <button>Accept invitation and set password</button>
+      </form>
+      <form id='sign-in' class='card'>
+        <p class='eyebrow'>Authorised access</p>
+        <h2>Sign in</h2>
+        <label>Email<input name='email' type='email' autocomplete='username' required maxlength='254'></label>
+        <label>Password<input name='password' type='password' autocomplete='current-password' required maxlength='1024'></label>
+        <button>Sign in securely</button>
+      </form>
+      <form id='forgot-password' class='card'>
+        <p class='eyebrow'>Account recovery</p>
+        <h2>Forgot password</h2>
+        <p>Request a one-time recovery code for your invited staff account.</p>
+        <label>Email<input name='email' type='email' autocomplete='username' required maxlength='254'></label>
+        <button>Send recovery code</button>
+      </form>
+      <form id='reset-password' class='card'>
+        <p class='eyebrow'>One-time code</p>
+        <h2>Reset password</h2>
+        <p>Use the recovery code from your email. Expired codes cannot be reused.</p>
+        <label>Email<input name='email' type='email' autocomplete='username' required maxlength='254'></label>
+        <label>Recovery code<input name='token' inputmode='numeric' autocomplete='one-time-code' pattern='[0-9]{6,10}' required></label>
+        <label>New password<input name='password' type='password' autocomplete='new-password' minlength='12' maxlength='1024' required></label>
+        <button>Reset password</button>
+      </form>
+    </div>
+    <button id='sign-out' type='button'>Sign out of this portal</button>
+    <p id='auth-status' role='status' aria-live='polite'></p>
+    <div class='actions'>
+      <a class='secondary' href='/credit/staff'>Staff workspace</a>
+      <a class='secondary' href='/credit/admin'>CEO administration</a>
+    </div>
+  </main>
+</body>
+</html>

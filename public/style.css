@@ -5,7 +5,8 @@
 html { color-scheme: light; scroll-behavior: smooth; }
 body {
   margin: 0;
-  min-width: 320px;
+  min-width: 0;
+  overflow-x: clip;
   background: #fff;
   color: var(--ink, #0d0d14);
   font-family: var(--font-body, sans-serif);
@@ -22,6 +23,7 @@ body::before {
 }
 a { color: var(--purple); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 button, input, select, textarea { font: inherit; }
+input, select, textarea { min-width: 0; font-size: 16px; }
 button, a, input, textarea, select { touch-action: manipulation; }
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible,
 textarea:focus-visible, summary:focus-visible { outline: 3px solid var(--orange); outline-offset: 3px; }
@@ -120,6 +122,7 @@ main { min-width: 0; padding: 52px clamp(24px, 6vw, 88px) 36px; }
 .page-intro, .heading { max-width: 780px; margin-bottom: 30px; }
 .page-intro::before { content: ''; display: block; width: 62px; height: 4px; margin-bottom: 24px; border-radius: 999px; background: var(--orange); }
 h1, h2, h3, legend { color: var(--purple-deep); }
+h1, h2, h3, legend, p, li { overflow-wrap: anywhere; }
 h1, h2, h3 { font-family: var(--font-display); }
 h1 { margin: 0 0 18px; font-size: clamp(38px, 5vw, 58px); font-weight: 700; letter-spacing: -.035em; line-height: 1.03; }
 h2 { margin: 0 0 14px; font-size: clamp(23px, 3vw, 31px); line-height: 1.2; }
@@ -303,6 +306,8 @@ td { font-size: 13px; }
 .guidance-card:empty { display: none; }
 .guidance-card p, .suggested-plan p { margin: 7px 0 0; color: #5d4211; font-size: 13px; }
 .suggested-plan h3 { margin-bottom: 8px; }
+.product-suggestion + .product-suggestion { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--gold); }
+.product-suggestion h3 { margin: 12px 0 4px; font-size: 19px; }
 .cta-stack { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
 .primary-cta, .secondary-cta { min-height: 46px; padding: 12px 20px; border: 1px solid var(--purple); border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; text-align: center; text-decoration: none; }
 .primary-cta { background: var(--purple); color: var(--white); box-shadow: 0 9px 22px rgba(92, 0, 140, .16); }
@@ -323,9 +328,18 @@ td { font-size: 13px; }
 }
 
 @media (max-width: 480px) {
-  .check-main { padding-top: 38px; }
+  .public-check header { min-width: 0; padding: 12px 16px; gap: 8px; }
+  .public-check .brand { min-width: 0; gap: 8px; }
+  .public-check .brand span { max-width: 122px; }
+  .public-check .brand-logo { width: 40px; height: 40px; }
+  .public-check .portal-link { flex: 0 0 auto; padding: 7px 9px; white-space: nowrap; }
+  .check-main { padding: 32px 14px 48px; }
+  .check-hero { margin-bottom: 30px; }
+  .check-hero h1 { font-size: clamp(30px, 10vw, 36px); }
   .check-hero > p:not(.eyebrow) { font-size: 15px; }
   .trust-strip span { font-size: 10px; }
+  .check-guide { padding: 14px 10px; }
+  .check-form, .privacy-note { padding: 18px; }
+  .guidance-card, .suggested-plan { padding: 14px; }
   .cta-stack > * { width: 100%; }
-  .privacy-note { padding: 24px; }
 }

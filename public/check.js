@@ -11,9 +11,11 @@ const product = document.querySelector('#product-code');
 const purpose = document.querySelector('#purpose-code');
 const purposeGuidance = document.querySelector('#purpose-guidance');
 const productGuidance = document.querySelector('#product-guidance');
+const calculationAvailability = document.querySelector('#calculation-availability');
 let current = 0;
 let products = [];
 let purposeCatalog = [];
+let guidanceProducts = [];
 let policiesAvailable = false;
 
 function showStep(index) {
@@ -65,27 +67,39 @@ function renderPurposeGuidance() {
 }
 
 function renderProductGuidance() {
-  const selected = products.find(item => item.code === product.value);
+  const suggestedCodes = selectedPurpose()?.suggestedProductCodes ?? [];
+  const suggested = suggestedCodes.map(code => guidanceProducts.find(item => item.code === code)).filter(Boolean);
   productGuidance.replaceChildren();
-  if (!selected?.guidance) return;
-  const title = document.createElement('strong');
-  title.textContent = selected.name;
-  const summary = document.createElement('p');
-  summary.textContent = selected.guidance.summary;
-  const details = document.createElement('p');
-  details.textContent = selected.guidance.repaymentPattern + '. ' + selected.guidance.amountGuide + '.';
-  productGuidance.append(title, summary, details);
+  if (suggested.length === 0) return;
+  const heading = document.createElement('strong');
+  heading.textContent = suggested.length === 1 ? 'Suggested Nobles product to discuss' : 'Suggested Nobles products to discuss';
+  productGuidance.append(heading);
+  for (const item of suggested) {
+    const card = document.createElement('section');
+    card.className = 'product-suggestion';
+    const title = document.createElement('h3');
+    title.textContent = item.name;
+    const summary = document.createElement('p');
+    summary.textContent = item.summary;
+    const details = document.createElement('p');
+    details.textContent = item.repaymentPattern + '. ' + item.amountGuide + '.';
+    card.append(title, summary, details);
+    productGuidance.append(card);
+  }
 }
 
 function updateProducts() {
   const candidates = products.filter(item => item.purposeCodes.includes(purpose.value));
   const previousValue = product.value;
-  product.replaceChildren(option('', candidates.length ? 'Select a Nobles product' : 'No policy-backed product for this purpose'));
+  product.replaceChildren(option('', candidates.length ? 'Select a Nobles product' : 'Suggestion shown below - calculation policy pending'));
   for (const item of candidates) product.append(option(item.code, item.name));
   if (candidates.some(item => item.code === previousValue)) product.value = previousValue;
   else if (candidates.length === 1) product.value = candidates[0].code;
   product.disabled = candidates.length === 0;
   submit.disabled = !policiesAvailable || !product.value;
+  calculationAvailability.textContent = candidates.length
+    ? 'The selected purpose has an approved product policy available for this preliminary calculation. This remains a readiness indicator, not approval.'
+    : 'The product suggestion below is guidance from Nobles public product information. A percentage cannot be calculated for this purpose until an approved executable product-purpose policy is available.';
   renderPurposeGuidance();
   renderProductGuidance();
 }
@@ -97,15 +111,15 @@ async function loadConfiguration() {
     if (!response.ok) throw new Error('UNAVAILABLE');
     products = Array.isArray(data.products) ? data.products : [];
     purposeCatalog = Array.isArray(data.purposeCatalog) ? data.purposeCatalog : [];
+    guidanceProducts = Array.isArray(data.guidanceProducts) ? data.guidanceProducts : [];
     purpose.replaceChildren(option('', 'Select a purpose'));
     for (const item of purposeCatalog) purpose.append(option(item.code, item.label));
     purpose.disabled = purposeCatalog.length === 0;
     policiesAvailable = data.status === 'AVAILABLE' && products.length > 0;
     if (!policiesAvailable) {
       policyStatus.textContent = 'You can explore Nobles purposes and answer the questions, but a live percentage and product plan remain unavailable until approved executable readiness policies are configured.';
-      product.replaceChildren(option('POLICY_PENDING', 'Product selection awaiting approved policy'));
-      product.disabled = true;
       submit.textContent = 'Calculation unavailable';
+      updateProducts();
       return;
     }
     updateProducts();
@@ -114,8 +128,9 @@ async function loadConfiguration() {
     policyStatus.textContent = 'The readiness service is temporarily unavailable. No answers have been sent or saved.';
     purpose.replaceChildren(option('', 'Purpose catalogue temporarily unavailable'));
     product.replaceChildren(option('SERVICE_PENDING', 'Product selection temporarily unavailable'));
-    purpose.disabled = false;
-    product.disabled = false;
+    purpose.disabled = true;
+    product.disabled = true;
+    calculationAvailability.textContent = 'Product guidance and readiness calculation are temporarily unavailable.';
     submit.textContent = 'Calculation unavailable';
   }
 }
@@ -220,7 +235,7 @@ form.addEventListener('submit', async event => {
       ? 'Enter each amount in naira using no more than two decimal places.'
       : 'We could not complete the check. No answers were saved. Please try again later.';
   } finally {
-    submit.disabled = !policiesAvailable;
+    submit.disabled = !policiesAvailable || !product.value;
   }
 });
 

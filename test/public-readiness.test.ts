@@ -5,7 +5,7 @@ import { createApp } from '../src/server/app.ts';
 import type { Actor } from '../src/domain/access.ts';
 import { parsePublicReadinessInput, publicReadinessAssessment, publicReadinessPolicy } from '../src/domain/public-readiness.ts';
 import { PublicReadinessRepository } from '../src/server/public-readiness.ts';
-import { publicProductGuidance, publicPurposeCatalog } from '../src/domain/product-guidance.ts';
+import { publicProductCatalog, publicProductGuidance, publicPurposeCatalog } from '../src/domain/product-guidance.ts';
 import type { StaffAuthentication } from '../src/server/staff-auth.ts';
 import type pg from 'pg';
 
@@ -54,6 +54,7 @@ test('public guidance offers broad purposes without treating website description
   assert.ok(catalog.some(item => item.code === 'SCHOOL_FEES' && item.suggestedProductCodes.includes('EASYPAY')));
   assert.ok(catalog.some(item => item.code === 'BUSINESS_EXPANSION' && item.suggestedProductCodes.includes('MARKETPOWER')));
   assert.equal(publicProductGuidance('MARKET_LIFT')?.repaymentPattern, 'Daily repayment over 25 working days');
+  assert.deepEqual(publicProductCatalog().map(item => item.code), ['MARKETLIFT', 'MARKETPOWER', 'EASYPAY', 'UNITY']);
   assert.equal(catalog.find(item => item.code === 'APPROVED_SPECIAL_PURPOSE')?.suggestedProductCodes.length, 0);
 });
 
@@ -85,6 +86,10 @@ test('public repository calculates in a read-only transaction without storing an
     release() {}
   };
   const repository = new PublicReadinessRepository({ async connect() { return client; } } as unknown as pg.Pool);
+  const configuration = await repository.configuration();
+  assert.equal(configuration.guidanceProducts.length, 4);
+  assert.ok(configuration.purposeCatalog.length >= 20);
+  queries.length = 0;
   const result = await repository.evaluate(body);
   assert.equal(result.status, 'READY_FOR_FORMAL_REVIEW');
   assert.equal(result.estimatedEligibleAmountKobo, null);
@@ -111,7 +116,7 @@ test('public route is staff-only, rate-limited and protected shells require serv
     clearCookie() {}
   } as unknown as StaffAuthentication;
   const publicReadiness = {
-    async configuration() { return { status: 'POLICY_CONFIGURATION_REQUIRED', products: [], purposeCatalog: publicPurposeCatalog() }; },
+    async configuration() { return { status: 'POLICY_CONFIGURATION_REQUIRED', products: [], purposeCatalog: publicPurposeCatalog(), guidanceProducts: publicProductCatalog() }; },
     async evaluate() { return { status: 'POLICY_CONFIGURATION_REQUIRED', readinessPercentage: null, reasons: [], remark: 'Policies required.', suggestedPlan: null, estimatedEligibleAmountKobo: null }; }
   } as unknown as PublicReadinessRepository;
   const options = { origin, surface: 'staff' as 'staff' | 'administration', staffAuth, publicReadiness };

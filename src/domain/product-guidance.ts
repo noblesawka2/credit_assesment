@@ -99,3 +99,7 @@ export function publicPurposeCatalog(additionalCodes: Iterable<string> = []) {
 export function publicProductGuidance(code: string) {
   return products[normalizedProductCode(code)];
 }
+
+export function publicProductCatalog() {
+  return Object.entries(products).map(([code, guidance]) => ({ code, ...guidance }));
+}

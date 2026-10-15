@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { validateProduct } from '../domain/diagnostic.ts';
 import type { ProductMathConfig } from '../domain/money.ts';
 import { assertPublicReadinessShape, parsePublicReadinessInput, publicReadinessAssessment, publicReadinessPolicy } from '../domain/public-readiness.ts';
-import { publicProductGuidance, publicPurposeCatalog, publicPurposeGuidance } from '../domain/product-guidance.ts';
+import { publicProductCatalog, publicProductGuidance, publicPurposeCatalog, publicPurposeGuidance } from '../domain/product-guidance.ts';
 import { DomainError, money } from '../domain/validation.ts';
 
 const productMoney = ['minimumPrincipalKobo', 'maximumPrincipalKobo', 'principalIncrementKobo', 'spreadFixedChargesKobo', 'fixedPeriodicObligationKobo', 'deductedFromProceedsFixedKobo'] as const;
@@ -73,9 +73,10 @@ export class PublicReadinessRepository {
       }
       await client.query('COMMIT');
       const purposeCatalog = publicPurposeCatalog(products.flatMap(product => product.purposeCodes));
+      const guidanceProducts = publicProductCatalog();
       return products.length > 0
-        ? { status: 'AVAILABLE', products, purposeCatalog }
-        : { status: 'POLICY_CONFIGURATION_REQUIRED', products: [], purposeCatalog };
+        ? { status: 'AVAILABLE', products, purposeCatalog, guidanceProducts }
+        : { status: 'POLICY_CONFIGURATION_REQUIRED', products: [], purposeCatalog, guidanceProducts };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

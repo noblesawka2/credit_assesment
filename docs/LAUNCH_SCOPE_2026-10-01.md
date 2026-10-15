@@ -16,6 +16,8 @@ The staff root redirects to `/check`. The administration root redirects to `/cre
 - The calculation runs in a PostgreSQL `READ ONLY` transaction. It does not create an application, result, audit record, cookie or browser persistence entry and does not retain the submitted answers.
 - The response contains only a public status, percentage, public-safe reasons and a null eligible amount. It does not return policy identifiers, rule boundaries, internal score details, member records or staff data.
 - The result is an initial policy-based indicator, not a loan application, approval, offer, guarantee, membership/KYC check or final eligible amount.
+- The page may show a broad educational purpose catalogue and public website product guidance even when policies are absent. Those descriptions do not activate a purpose, threshold, amount or product for calculation.
+- When a valid published public-self-check policy exists, the result also includes a plain-language remark and a product plan to discuss. The plan is selected from the policy-authorized product/purpose pair and remains non-binding.
 - The primary CTA uses `https://mynoblescooperative.com/membership/`; the secondary CTA uses the existing Nobles Member Care WhatsApp route.
 
 ## Policy gate

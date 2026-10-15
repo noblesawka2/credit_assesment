@@ -176,5 +176,10 @@ export function publicReadinessAssessment(input: PublicReadinessInput, policy: P
     : readinessPercentage >= policy.reviewMinimumPercentage
       ? 'NEEDS_ATTENTION'
       : 'NOT_CURRENTLY_READY';
-  return { status, readinessPercentage, reasons, estimatedEligibleAmountKobo: null };
+  const remarks = {
+    READY_FOR_FORMAL_REVIEW: 'Your reported figures appear strong enough for a formal Nobles review, subject to membership, identity, document and affordability checks.',
+    NEEDS_ATTENTION: 'Your reported figures show areas to improve or clarify before a formal Nobles review.',
+    NOT_CURRENTLY_READY: 'Your reported figures suggest that new credit may add pressure. Consider a smaller request, reducing commitments or building savings first.'
+  };
+  return { status, readinessPercentage, reasons, remark: remarks[status], estimatedEligibleAmountKobo: null };
 }

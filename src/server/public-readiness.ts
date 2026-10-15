@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { validateProduct } from '../domain/diagnostic.ts';
 import type { ProductMathConfig } from '../domain/money.ts';
 import { assertPublicReadinessShape, parsePublicReadinessInput, publicReadinessAssessment, publicReadinessPolicy } from '../domain/public-readiness.ts';
+import { publicProductGuidance, publicPurposeCatalog, publicPurposeGuidance } from '../domain/product-guidance.ts';
 import { DomainError, money } from '../domain/validation.ts';
 
 const productMoney = ['minimumPrincipalKobo', 'maximumPrincipalKobo', 'principalIncrementKobo', 'spreadFixedChargesKobo', 'fixedPeriodicObligationKobo', 'deductedFromProceedsFixedKobo'] as const;
@@ -59,19 +60,22 @@ export class PublicReadinessRepository {
           validatedProduct(selected.product);
           const policy = publicReadinessPolicy(selected.score.payload, selected.eligibility.payload);
           const publicName = selected.product.payload.publicName;
+          const guidance = publicProductGuidance(code);
           products.push({
             code,
             name: typeof publicName === 'string' && publicName.trim().length > 0 && publicName.length <= 100 ? publicName.trim() : code,
-            purposeCodes: policy.purposeCodes
+            purposeCodes: policy.purposeCodes,
+            guidance: guidance ?? null
           });
         } catch (error) {
           if (!(error instanceof DomainError)) throw error;
         }
       }
       await client.query('COMMIT');
+      const purposeCatalog = publicPurposeCatalog(products.flatMap(product => product.purposeCodes));
       return products.length > 0
-        ? { status: 'AVAILABLE', products }
-        : { status: 'POLICY_CONFIGURATION_REQUIRED', products: [] };
+        ? { status: 'AVAILABLE', products, purposeCatalog }
+        : { status: 'POLICY_CONFIGURATION_REQUIRED', products: [], purposeCatalog };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -89,18 +93,36 @@ export class PublicReadinessRepository {
       const selected = selectedPolicies(rows);
       if (!selected.product || !selected.score || !selected.eligibility) {
         await client.query('COMMIT');
-        return { status: 'POLICY_CONFIGURATION_REQUIRED', readinessPercentage: null, reasons: [], estimatedEligibleAmountKobo: null };
+        return { status: 'POLICY_CONFIGURATION_REQUIRED', readinessPercentage: null, reasons: [], remark: 'Approved executable readiness policies are required before Nobles can produce a percentage or product plan.', suggestedPlan: null, estimatedEligibleAmountKobo: null };
       }
       validatedProduct(selected.product);
       const policy = publicReadinessPolicy(selected.score.payload, selected.eligibility.payload);
       const input = parsePublicReadinessInput(body, policy);
       const result = publicReadinessAssessment(input, policy);
+      const guidance = publicProductGuidance(input.productCode);
+      const purpose = publicPurposeGuidance(input.purposeCode);
+      const publicName = selected.product.payload.publicName;
+      const productName = typeof publicName === 'string' && publicName.trim().length > 0 && publicName.length <= 100 ? publicName.trim() : guidance?.name ?? input.productCode;
+      const nextSteps: Record<string, string> = {
+        READY_FOR_FORMAL_REVIEW: 'Speak with a Nobles officer to begin a formal assessment and verification.',
+        NEEDS_ATTENTION: 'Review the requested amount, expenses and existing repayments with a Nobles officer before applying.',
+        NOT_CURRENTLY_READY: 'Consider reducing the request or commitments and building a stronger savings and cash-flow position before applying.'
+      };
+      const suggestedPlan = guidance ? {
+        productCode: input.productCode,
+        productName,
+        purpose: purpose?.label ?? input.purposeCode,
+        summary: guidance.summary,
+        repaymentPattern: guidance.repaymentPattern,
+        amountGuide: guidance.amountGuide,
+        nextStep: nextSteps[result.status]
+      } : null;
       await client.query('COMMIT');
-      return result;
+      return { ...result, suggestedPlan };
     } catch (error) {
       await client.query('ROLLBACK');
       if (error instanceof DomainError && error.code === 'PUBLIC_READINESS_POLICY_REQUIRED') {
-        return { status: 'POLICY_CONFIGURATION_REQUIRED', readinessPercentage: null, reasons: [], estimatedEligibleAmountKobo: null };
+        return { status: 'POLICY_CONFIGURATION_REQUIRED', readinessPercentage: null, reasons: [], remark: 'Approved executable readiness policies are required before Nobles can produce a percentage or product plan.', suggestedPlan: null, estimatedEligibleAmountKobo: null };
       }
       throw error;
     } finally {

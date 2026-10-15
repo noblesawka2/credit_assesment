@@ -6,7 +6,8 @@ import { clientAddressResolver } from "../src/server/proxy.ts";
 import { runtimePoolSettings } from "../src/server/pool-config.ts";
 import { backendHealth } from "../src/server/health.ts";
 import { createRuntime } from "../src/server/runtime.ts";
-import { createVercelHandler } from "../src/server/vercel.ts";
+import { createVercelHandler, startupDiagnostic } from "../src/server/vercel.ts";
+import { DomainError } from "../src/domain/validation.ts";
 import { applicationEnvironment } from "../src/server/environment.ts";
 import { StaffAuthentication } from "../src/server/staff-auth.ts";
 import { PayloadCipher } from "../src/server/encryption.ts";
@@ -42,6 +43,17 @@ test("shared rate-limit keys use platform client identity and ignore spoofed ord
   assert.equal(keys[0], keys[1]); assert.notEqual(keys[1], keys[2]);
   await assert.rejects(auth.rateLimit(request(), "api"), /INVALID_PROXY_ADDRESS/);
   assert.equal(keys.length, 3);
+});
+
+test("administration startup diagnostics expose only safe codes and variable names", () => {
+  const secret = "SYNTHETIC_SECRET_MUST_NOT_APPEAR";
+  const auth = startupDiagnostic(new DomainError("SUPABASE_CONFIGURATION_REQUIRED"), { SUPABASE_URL: "https://example.supabase.co", SUPABASE_ANON_KEY: secret });
+  assert.deepEqual(auth, { startup: "STARTUP_AUTH_CONFIG_MISSING", variable: "SUPABASE_SERVICE_ROLE_KEY" });
+  assert.deepEqual(startupDiagnostic(new DomainError("PORTAL_ORIGIN_MISMATCH"), {}), { startup: "STARTUP_ORIGIN_MISMATCH", variable: "APP_ORIGIN" });
+  assert.deepEqual(startupDiagnostic(new DomainError("DATABASE_CA_ENCODING_INVALID"), { DATABASE_SSL_CA_BASE64: secret }), { startup: "STARTUP_CA_INVALID", variable: "DATABASE_SSL_CA_BASE64" });
+  assert.deepEqual(startupDiagnostic(new DomainError("DATABASE_USERNAME_TARGET_MISMATCH"), { DATABASE_URL: secret }), { startup: "STARTUP_DATABASE_CONFIG_FAILED", check: "DATABASE_USERNAME_TARGET_MISMATCH", variable: "DATABASE_URL" });
+  assert.deepEqual(startupDiagnostic({ code: "28P01", message: secret }, {}), { startup: "STARTUP_DATABASE_CONNECT_FAILED" });
+  assert.doesNotMatch(JSON.stringify(auth), /SYNTHETIC_SECRET/);
 });
 
 test("pool settings bound each instance and validate the combined two-project budget", () => {

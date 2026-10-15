@@ -23,8 +23,8 @@
   </header>
   <main id="main" class="check-main">
     <section class="check-hero" aria-labelledby="page-title">
-      <p class="eyebrow">A private preliminary self-check</p>
-      <h1 id="page-title">See how ready you may be before a formal credit assessment.</h1>
+      <p class="eyebrow">Nobles credit readiness guide</p>
+      <h1 id="page-title">Find a suitable Nobles route and see how ready you may be for formal review.</h1>
       <p>Answer a few simple money questions. Do not enter your name, member number, BVN, NIN, account details, password, PIN or OTP.</p>
       <div class="trust-strip" aria-label="Privacy and scope">
         <span>No sign-in</span><span>No identity details</span><span>No documents</span><span>No data saved</span>
@@ -56,6 +56,7 @@
                 <option value="">Approved purposes will appear here</option>
               </select>
             </label>
+            <div id="purpose-guidance" class="guidance-card" aria-live="polite"></div>
             <label>Amount you are considering (₦)
               <input id="requested-amount" type="number" inputmode="decimal" min="0.01" step="0.01" required placeholder="e.g. 250000">
             </label>
@@ -102,13 +103,14 @@
           </fieldset>
 
           <fieldset class="check-step" data-step="4" hidden>
-            <legend>Choose an available Nobles product</legend>
-            <p class="step-copy">Only products backed by approved, effective Nobles policies appear here.</p>
+            <legend>Review the Nobles plan that may fit</legend>
+            <p class="step-copy">Only products backed by approved, effective Nobles policies can produce a readiness percentage.</p>
             <label>Product
               <select id="product-code" required disabled>
                 <option value="">Approved products will appear here</option>
               </select>
             </label>
+            <div id="product-guidance" class="guidance-card" aria-live="polite"></div>
             <div class="notice compact">Your result is a policy-based readiness indicator only. It does not verify identity, membership, KYC, exposure, documents or final affordability.</div>
           </fieldset>
 
@@ -116,7 +118,9 @@
             <p class="eyebrow">Your preliminary result</p>
             <h2 id="result-title">Result unavailable</h2>
             <p id="result-score" class="result-score"></p>
+            <p id="result-remark" class="result-remark"></p>
             <ul id="result-reasons" class="result-reasons"></ul>
+            <div id="result-plan" class="suggested-plan" hidden></div>
             <p id="result-note">A result will appear only when approved executable Nobles policies are available.</p>
             <div class="cta-stack">
               <a class="primary-cta" href="https://mynoblescooperative.com/membership/">Become a Nobles Member</a>

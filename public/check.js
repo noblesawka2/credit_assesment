@@ -9,8 +9,11 @@ const submit = document.querySelector('#submit-check');
 const restart = document.querySelector('#restart-check');
 const product = document.querySelector('#product-code');
 const purpose = document.querySelector('#purpose-code');
+const purposeGuidance = document.querySelector('#purpose-guidance');
+const productGuidance = document.querySelector('#product-guidance');
 let current = 0;
 let products = [];
+let purposeCatalog = [];
 let policiesAvailable = false;
 
 function showStep(index) {
@@ -39,10 +42,6 @@ function validStep(index) {
   return true;
 }
 
-function label(code) {
-  return code.toLowerCase().split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-}
-
 function option(value, text) {
   const item = document.createElement('option');
   item.value = value;
@@ -50,14 +49,45 @@ function option(value, text) {
   return item;
 }
 
-function updatePurposes() {
+function selectedPurpose() {
+  return purposeCatalog.find(item => item.code === purpose.value);
+}
+
+function renderPurposeGuidance() {
+  const selected = selectedPurpose();
+  purposeGuidance.replaceChildren();
+  if (!selected) return;
+  const title = document.createElement('strong');
+  title.textContent = selected.label;
+  const description = document.createElement('p');
+  description.textContent = selected.description;
+  purposeGuidance.append(title, description);
+}
+
+function renderProductGuidance() {
   const selected = products.find(item => item.code === product.value);
-  const codes = selected?.purposeCodes ?? [...new Set(products.flatMap(item => item.purposeCodes))];
-  const previousValue = purpose.value;
-  purpose.replaceChildren(option('', 'Select a purpose'));
-  for (const code of codes) purpose.append(option(code, label(code)));
-  if (codes.includes(previousValue)) purpose.value = previousValue;
-  purpose.disabled = codes.length === 0;
+  productGuidance.replaceChildren();
+  if (!selected?.guidance) return;
+  const title = document.createElement('strong');
+  title.textContent = selected.name;
+  const summary = document.createElement('p');
+  summary.textContent = selected.guidance.summary;
+  const details = document.createElement('p');
+  details.textContent = selected.guidance.repaymentPattern + '. ' + selected.guidance.amountGuide + '.';
+  productGuidance.append(title, summary, details);
+}
+
+function updateProducts() {
+  const candidates = products.filter(item => item.purposeCodes.includes(purpose.value));
+  const previousValue = product.value;
+  product.replaceChildren(option('', candidates.length ? 'Select a Nobles product' : 'No policy-backed product for this purpose'));
+  for (const item of candidates) product.append(option(item.code, item.name));
+  if (candidates.some(item => item.code === previousValue)) product.value = previousValue;
+  else if (candidates.length === 1) product.value = candidates[0].code;
+  product.disabled = candidates.length === 0;
+  submit.disabled = !policiesAvailable || !product.value;
+  renderPurposeGuidance();
+  renderProductGuidance();
 }
 
 async function loadConfiguration() {
@@ -66,25 +96,23 @@ async function loadConfiguration() {
     const data = await response.json();
     if (!response.ok) throw new Error('UNAVAILABLE');
     products = Array.isArray(data.products) ? data.products : [];
+    purposeCatalog = Array.isArray(data.purposeCatalog) ? data.purposeCatalog : [];
+    purpose.replaceChildren(option('', 'Select a purpose'));
+    for (const item of purposeCatalog) purpose.append(option(item.code, item.label));
+    purpose.disabled = purposeCatalog.length === 0;
     policiesAvailable = data.status === 'AVAILABLE' && products.length > 0;
     if (!policiesAvailable) {
-      policyStatus.textContent = 'A live result is not available because approved executable readiness policies are not configured. You may review the questions, but Nobles will not fabricate a score.';
-      purpose.replaceChildren(option('POLICY_PENDING', 'Purpose selection awaiting approved policy'));
+      policyStatus.textContent = 'You can explore Nobles purposes and answer the questions, but a live percentage and product plan remain unavailable until approved executable readiness policies are configured.';
       product.replaceChildren(option('POLICY_PENDING', 'Product selection awaiting approved policy'));
-      purpose.disabled = false;
-      product.disabled = false;
+      product.disabled = true;
       submit.textContent = 'Calculation unavailable';
       return;
     }
-    product.replaceChildren(option('', 'Select a product'));
-    for (const item of products) product.append(option(item.code, item.name));
-    product.disabled = false;
-    updatePurposes();
+    updateProducts();
     policyStatus.textContent = 'Approved executable readiness policies are available. Your answers are used only for this calculation and are not saved.';
-    submit.disabled = false;
   } catch {
     policyStatus.textContent = 'The readiness service is temporarily unavailable. No answers have been sent or saved.';
-    purpose.replaceChildren(option('SERVICE_PENDING', 'Purpose selection temporarily unavailable'));
+    purpose.replaceChildren(option('', 'Purpose catalogue temporarily unavailable'));
     product.replaceChildren(option('SERVICE_PENDING', 'Product selection temporarily unavailable'));
     purpose.disabled = false;
     product.disabled = false;
@@ -117,11 +145,16 @@ function renderResult(data) {
   const title = document.querySelector('#result-title');
   const score = document.querySelector('#result-score');
   const reasons = document.querySelector('#result-reasons');
+  const remark = document.querySelector('#result-remark');
+  const plan = document.querySelector('#result-plan');
   const note = document.querySelector('#result-note');
   reasons.replaceChildren();
+  plan.replaceChildren();
+  plan.hidden = true;
   if (data.status === 'POLICY_CONFIGURATION_REQUIRED') {
     title.textContent = 'Live calculation is not currently available';
     score.textContent = '';
+    remark.textContent = data.remark ?? '';
     note.textContent = 'Approved executable PRODUCT, SCORE and ELIGIBILITY policies are required before Nobles can show a readiness result.';
   } else {
     const titles = {
@@ -131,10 +164,25 @@ function renderResult(data) {
     };
     title.textContent = titles[data.status] ?? 'Preliminary readiness result';
     score.textContent = Number.isInteger(data.readinessPercentage) ? data.readinessPercentage + '% readiness indicator' : '';
+    remark.textContent = data.remark ?? '';
     for (const text of Array.isArray(data.reasons) ? data.reasons : []) {
       const item = document.createElement('li');
       item.textContent = text;
       reasons.append(item);
+    }
+    if (data.suggestedPlan) {
+      const heading = document.createElement('h3');
+      heading.textContent = 'Suggested Nobles plan to discuss: ' + data.suggestedPlan.productName;
+      const summary = document.createElement('p');
+      summary.textContent = data.suggestedPlan.summary;
+      const purposeText = document.createElement('p');
+      purposeText.textContent = 'Purpose: ' + data.suggestedPlan.purpose;
+      const repayment = document.createElement('p');
+      repayment.textContent = data.suggestedPlan.repaymentPattern + '. ' + data.suggestedPlan.amountGuide + '.';
+      const nextStep = document.createElement('p');
+      nextStep.textContent = data.suggestedPlan.nextStep;
+      plan.append(heading, summary, purposeText, repayment, nextStep);
+      plan.hidden = false;
     }
     note.textContent = 'This is not approval, an offer, a guarantee or a final eligible amount. Speak with a Nobles officer for a formal assessment.';
   }
@@ -146,10 +194,11 @@ next.addEventListener('click', () => {
   if (validStep(current)) showStep(current + 1);
 });
 previous.addEventListener('click', () => showStep(current - 1));
-product.addEventListener('change', updatePurposes);
+purpose.addEventListener('change', updateProducts);
+product.addEventListener('change', renderProductGuidance);
 restart.addEventListener('click', () => {
   form.reset();
-  if (policiesAvailable) updatePurposes();
+  updateProducts();
   showStep(0);
 });
 form.addEventListener('submit', async event => {

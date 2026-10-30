@@ -1,31 +1,16 @@
 import type { Pool, PoolClient } from 'pg';
-import { validateProduct } from '../domain/diagnostic.ts';
-import type { ProductMathConfig } from '../domain/money.ts';
-import { assertPublicReadinessShape, parsePublicReadinessInput, publicReadinessAssessment, publicReadinessPolicy } from '../domain/public-readiness.ts';
+import { assertPublicReadinessShape, parsePublicGuidanceInput, publicFinancialGuidanceAssessment } from '../domain/public-readiness.ts';
 import { publicProductCatalog, publicProductGuidance, publicPurposeCatalog, publicPurposeGuidance } from '../domain/product-guidance.ts';
-import { DomainError, money } from '../domain/validation.ts';
+import { requireControl } from '../domain/validation.ts';
 
-const productMoney = ['minimumPrincipalKobo', 'maximumPrincipalKobo', 'principalIncrementKobo', 'spreadFixedChargesKobo', 'fixedPeriodicObligationKobo', 'deductedFromProceedsFixedKobo'] as const;
-
-interface PolicyRow {
-  kind: 'PRODUCT' | 'SCORE' | 'ELIGIBILITY';
-  code: string;
-  payload: Record<string, unknown>;
-}
-
-function validatedProduct(row: PolicyRow) {
-  const product = { ...row.payload, code: row.code } as Record<string, unknown>;
-  for (const field of productMoney) product[field] = money(product[field]);
-  validateProduct(product as unknown as ProductMathConfig);
-  return product;
-}
-
-function selectedPolicies(rows: PolicyRow[]) {
-  return {
-    product: rows.find(row => row.kind === 'PRODUCT'),
-    score: rows.find(row => row.kind === 'SCORE'),
-    eligibility: rows.find(row => row.kind === 'ELIGIBILITY')
-  };
+function guidanceOptions() {
+  const purposes = publicPurposeCatalog();
+  return publicProductCatalog().map(product => ({
+    code: product.code,
+    name: product.name,
+    purposeCodes: purposes.filter(purpose => purpose.suggestedProductCodes.includes(product.code)).map(purpose => purpose.code),
+    guidance: product
+  }));
 }
 
 export class PublicReadinessRepository {
@@ -37,46 +22,15 @@ export class PublicReadinessRepository {
     await client.query(`SELECT set_config('nobles.can_readiness','true',true)`);
   }
 
-  private async current(client: PoolClient, code?: string): Promise<PolicyRow[]> {
-    const suffix = code ? ' AND code=$1' : '';
-    const values = code ? [code] : [];
-    return (await client.query(
-      `SELECT DISTINCT ON (kind,code) kind,code,payload FROM public.credit_policy_versions WHERE status='PUBLISHED' AND unresolved='[]'::jsonb AND effective_at<=now() AND kind IN ('PRODUCT','SCORE','ELIGIBILITY')` + suffix + ' ORDER BY kind,code,effective_at DESC,version DESC',
-      values
-    )).rows as PolicyRow[];
-  }
-
   async configuration() {
     const client = await this.pool.connect();
     try {
       await this.begin(client);
-      const rows = await this.current(client);
-      const codes = [...new Set(rows.filter(row => row.kind === 'PRODUCT').map(row => row.code))].sort();
-      const products = [];
-      for (const code of codes) {
-        const selected = selectedPolicies(rows.filter(row => row.code === code));
-        if (!selected.product || !selected.score || !selected.eligibility) continue;
-        try {
-          validatedProduct(selected.product);
-          const policy = publicReadinessPolicy(selected.score.payload, selected.eligibility.payload);
-          const publicName = selected.product.payload.publicName;
-          const guidance = publicProductGuidance(code);
-          products.push({
-            code,
-            name: typeof publicName === 'string' && publicName.trim().length > 0 && publicName.length <= 100 ? publicName.trim() : code,
-            purposeCodes: policy.purposeCodes,
-            guidance: guidance ?? null
-          });
-        } catch (error) {
-          if (!(error instanceof DomainError)) throw error;
-        }
-      }
+      const products = guidanceOptions();
       await client.query('COMMIT');
-      const purposeCatalog = publicPurposeCatalog(products.flatMap(product => product.purposeCodes));
+      const purposeCatalog = publicPurposeCatalog();
       const guidanceProducts = publicProductCatalog();
-      return products.length > 0
-        ? { status: 'AVAILABLE', products, purposeCatalog, guidanceProducts }
-        : { status: 'POLICY_CONFIGURATION_REQUIRED', products: [], purposeCatalog, guidanceProducts };
+      return { status: 'AVAILABLE', calculationMode: 'FINANCIAL_GUIDANCE', products, purposeCatalog, guidanceProducts };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -90,41 +44,24 @@ export class PublicReadinessRepository {
     const client = await this.pool.connect();
     try {
       await this.begin(client);
-      const rows = await this.current(client, body.productCode as string);
-      const selected = selectedPolicies(rows);
-      if (!selected.product || !selected.score || !selected.eligibility) {
-        await client.query('COMMIT');
-        return { status: 'POLICY_CONFIGURATION_REQUIRED', readinessPercentage: null, reasons: [], remark: 'Approved executable readiness policies are required before Nobles can produce a percentage or product plan.', suggestedPlan: null, estimatedEligibleAmountKobo: null };
-      }
-      validatedProduct(selected.product);
-      const policy = publicReadinessPolicy(selected.score.payload, selected.eligibility.payload);
-      const input = parsePublicReadinessInput(body, policy);
-      const result = publicReadinessAssessment(input, policy);
+      const input = parsePublicGuidanceInput(body);
       const guidance = publicProductGuidance(input.productCode);
       const purpose = publicPurposeGuidance(input.purposeCode);
-      const publicName = selected.product.payload.publicName;
-      const productName = typeof publicName === 'string' && publicName.trim().length > 0 && publicName.length <= 100 ? publicName.trim() : guidance?.name ?? input.productCode;
-      const nextSteps: Record<string, string> = {
-        READY_FOR_FORMAL_REVIEW: 'Speak with a Nobles officer to begin a formal assessment and verification.',
-        NEEDS_ATTENTION: 'Review the requested amount, expenses and existing repayments with a Nobles officer before applying.',
-        NOT_CURRENTLY_READY: 'Consider reducing the request or commitments and building a stronger savings and cash-flow position before applying.'
-      };
-      const suggestedPlan = guidance ? {
+      requireControl(Boolean(guidance) && Boolean(purpose) && purpose!.suggestedProductCodes.includes(input.productCode), 'INVALID_PRODUCT_FOR_PURPOSE');
+      const result = publicFinancialGuidanceAssessment(input);
+      const suggestedPlan = {
         productCode: input.productCode,
-        productName,
-        purpose: purpose?.label ?? input.purposeCode,
-        summary: guidance.summary,
-        repaymentPattern: guidance.repaymentPattern,
-        amountGuide: guidance.amountGuide,
-        nextStep: nextSteps[result.status]
-      } : null;
+        productName: guidance!.name,
+        purpose: purpose!.label,
+        summary: guidance!.summary,
+        repaymentPattern: guidance!.repaymentPattern,
+        amountGuide: guidance!.amountGuide,
+        nextStep: 'Discuss this product and the figures entered with a Nobles officer for verification and a formal assessment.'
+      };
       await client.query('COMMIT');
       return { ...result, suggestedPlan };
     } catch (error) {
       await client.query('ROLLBACK');
-      if (error instanceof DomainError && error.code === 'PUBLIC_READINESS_POLICY_REQUIRED') {
-        return { status: 'POLICY_CONFIGURATION_REQUIRED', readinessPercentage: null, reasons: [], remark: 'Approved executable readiness policies are required before Nobles can produce a percentage or product plan.', suggestedPlan: null, estimatedEligibleAmountKobo: null };
-      }
       throw error;
     } finally {
       client.release();

@@ -12,19 +12,17 @@ The staff root redirects to `/check`. The administration root redirects to `/cre
 ## Public self-check boundary
 
 - The browser sends only product, purpose, income type, approximate monthly income, business costs, household expenses, other commitments, existing repayments and requested amount.
-- The endpoint rejects extra fields, including identity fields, validates money and policy-defined ranges on the server, applies the shared API limiter and a dedicated public-readiness limiter, and accepts mutations only from the configured staff origin.
+- The endpoint rejects extra fields, including identity fields, validates money on the server, applies the shared API limiter and a dedicated public-readiness limiter, and accepts mutations only from the configured staff origin.
 - The calculation runs in a PostgreSQL `READ ONLY` transaction. It does not create an application, result, audit record, cookie or browser persistence entry and does not retain the submitted answers.
-- The response contains only a public status, percentage, public-safe reasons and a null eligible amount. It does not return policy identifiers, rule boundaries, internal score details, member records or staff data.
-- The result is an initial policy-based indicator, not a loan application, approval, offer, guarantee, membership/KYC check or final eligible amount.
-- The page may show a broad educational purpose catalogue and public website product guidance even when policies are absent. Those descriptions do not activate a purpose, threshold, amount or product for calculation.
-- When a valid published public-self-check policy exists, the result also includes a plain-language remark and a product plan to discuss. The plan is selected from the policy-authorized product/purpose pair and remains non-binding.
+- The response contains only a public status, cash-flow percentage, public-safe reasons and a null eligible amount. It does not return member records or staff data.
+- The percentage is the share of reported monthly income remaining after reported business costs, household expenses, other commitments and existing repayments. It is not a repayment probability or lending score.
+- The page shows a broad educational purpose catalogue and public website product guidance. Those descriptions do not activate a lending threshold, approved amount or credit decision.
+- The result includes a plain-language remark and a purpose-based product plan to discuss. The plan remains non-binding and requires officer verification and formal assessment.
 - The primary CTA uses `https://mynoblescooperative.com/membership/`; the secondary CTA uses the existing Nobles Member Care WhatsApp route.
 
-## Policy gate
+## Interim financial guidance
 
-The server requires effective, resolved, published `PRODUCT`, `SCORE` and `ELIGIBILITY` rows for the selected code. The product must pass the existing product validator. The approved score and eligibility payloads must also contain the versioned `PUBLIC_SCORE_V1` and `PUBLIC_READINESS_V1` public-self-check contracts. No threshold or amount is supplied by application code.
-
-If any required policy or public contract is absent or invalid, the public result is `POLICY_CONFIGURATION_REQUIRED` with a null percentage and amount. The page remains available as an educational experience. No synthetic policy is published by this release.
+The public check does not require or publish lending policies. It calculates only reported cash-flow headroom and always returns a null eligible amount. Product suggestions come from documented public product descriptions and purpose mappings, not from an approval rule. Formal underwriting, staff decisions and any future lending-policy workflow remain separate and controlled.
 
 ## Existing protected workflows
 

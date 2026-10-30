@@ -116,9 +116,18 @@ export function assertPublicReadinessShape(body: Record<string, unknown>) {
 }
 
 export function parsePublicReadinessInput(body: Record<string, unknown>, policy: PublicReadinessPolicy): PublicReadinessInput {
-  assertPublicReadinessShape(body);
+  const input = parsePublicGuidanceInput(body);
   requireControl(policy.purposeCodes.includes(body.purposeCode as string), 'INVALID_PURPOSE');
-  const input: PublicReadinessInput = {
+  for (const value of [input.monthlyIncomeKobo, input.monthlyBusinessCostsKobo, input.monthlyHouseholdExpensesKobo, input.monthlyOtherCommitmentsKobo, input.monthlyExistingRepaymentsKobo]) {
+    requireControl(value <= policy.maximumMonthlyAmountKobo, 'PUBLIC_READINESS_INPUT_OUT_OF_RANGE');
+  }
+  requireControl(input.requestedAmountKobo <= policy.maximumRequestedAmountKobo, 'PUBLIC_READINESS_INPUT_OUT_OF_RANGE');
+  return input;
+}
+
+export function parsePublicGuidanceInput(body: Record<string, unknown>): PublicReadinessInput {
+  assertPublicReadinessShape(body);
+  return {
     productCode: body.productCode,
     purposeCode: body.purposeCode,
     incomeType: enumValue(body.incomeType, ['SALARY', 'BUSINESS', 'MIXED', 'OTHER'] as const, 'INVALID_INCOME_TYPE'),
@@ -129,11 +138,6 @@ export function parsePublicReadinessInput(body: Record<string, unknown>, policy:
     monthlyExistingRepaymentsKobo: money(body.monthlyExistingRepaymentsKobo),
     requestedAmountKobo: money(body.requestedAmountKobo)
   } as PublicReadinessInput;
-  for (const value of [input.monthlyIncomeKobo, input.monthlyBusinessCostsKobo, input.monthlyHouseholdExpensesKobo, input.monthlyOtherCommitmentsKobo, input.monthlyExistingRepaymentsKobo]) {
-    requireControl(value <= policy.maximumMonthlyAmountKobo, 'PUBLIC_READINESS_INPUT_OUT_OF_RANGE');
-  }
-  requireControl(input.requestedAmountKobo <= policy.maximumRequestedAmountKobo, 'PUBLIC_READINESS_INPUT_OUT_OF_RANGE');
-  return input;
 }
 
 const publicReason: Record<Metric, Record<Outcome, string>> = {
@@ -182,4 +186,28 @@ export function publicReadinessAssessment(input: PublicReadinessInput, policy: P
     NOT_CURRENTLY_READY: 'Your reported figures suggest that new credit may add pressure. Consider a smaller request, reducing commitments or building savings first.'
   };
   return { status, readinessPercentage, reasons, remark: remarks[status], estimatedEligibleAmountKobo: null };
+}
+
+export function publicFinancialGuidanceAssessment(input: PublicReadinessInput) {
+  const reportedOutgoings = input.monthlyBusinessCostsKobo + input.monthlyHouseholdExpensesKobo + input.monthlyOtherCommitmentsKobo + input.monthlyExistingRepaymentsKobo;
+  const remainingIncome = input.monthlyIncomeKobo > reportedOutgoings ? input.monthlyIncomeKobo - reportedOutgoings : 0n;
+  const readinessPercentage = Number(remainingIncome * 100n / input.monthlyIncomeKobo);
+  const existingRepaymentPercentage = Number(input.monthlyExistingRepaymentsKobo * 100n / input.monthlyIncomeKobo);
+  const reasons = [
+    readinessPercentage + '% of the monthly income you entered remains after the regular costs and repayments you reported.',
+    'Existing repayments use about ' + existingRepaymentPercentage + '% of the monthly income you entered.'
+  ];
+  if (remainingIncome > 0n) {
+    const requestedMonthsTenths = (input.requestedAmountKobo * 10n + remainingIncome - 1n) / remainingIncome;
+    const requestedMonths = requestedMonthsTenths > 9990n
+      ? 'more than 999'
+      : (requestedMonthsTenths / 10n).toString() + '.' + (requestedMonthsTenths % 10n).toString();
+    reasons.push('The requested amount is about ' + requestedMonths + ' months of the reported income remaining after regular outgoings.');
+  } else {
+    reasons.push('The regular outgoings you reported use all or more of the monthly income entered.');
+  }
+  const remark = remainingIncome > 0n
+    ? 'This result shows your reported monthly cash-flow headroom. A Nobles officer must still verify the information and complete a formal assessment.'
+    : 'Your reported monthly outgoings leave no cash-flow headroom. Review the figures or discuss a more suitable plan with a Nobles officer.';
+  return { status: 'FINANCIAL_GUIDANCE_AVAILABLE', readinessPercentage, reasons, remark, estimatedEligibleAmountKobo: null };
 }

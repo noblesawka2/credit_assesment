@@ -46,7 +46,7 @@
       </aside>
 
       <div class="check-panel">
-        <div id="policy-status" class="notice" role="status">Checking whether approved readiness policies are available…</div>
+        <div id="readiness-status" class="notice" role="status">Loading the financial readiness guide…</div>
         <form id="public-readiness-form" class="card check-form" novalidate autocomplete="off">
           <fieldset class="check-step" data-step="0">
             <legend>What would the credit support?</legend>
@@ -104,14 +104,14 @@
 
           <fieldset class="check-step" data-step="4" hidden>
             <legend>Review the Nobles plan that may fit</legend>
-            <p class="step-copy">Only products backed by approved, effective Nobles policies can produce a readiness percentage.</p>
-            <label>Product available for readiness calculation
+            <p class="step-copy">Choose a suggested Nobles product to discuss alongside your financial readiness result.</p>
+            <label>Suggested product
               <select id="product-code" required disabled>
-                <option value="">Approved products will appear here</option>
+                <option value="">Suggested products will appear here</option>
               </select>
             </label>
             <div id="product-guidance" class="guidance-card" aria-live="polite"></div>
-            <div id="calculation-availability" class="notice compact">Your result is a policy-based readiness indicator only. It does not verify identity, membership, KYC, exposure, documents or final affordability.</div>
+            <div id="calculation-availability" class="notice compact">Your result is a cash-flow guide only. It does not verify identity, membership, KYC, exposure, documents or final affordability.</div>
           </fieldset>
 
           <section id="check-result" class="check-step result-panel" data-step="5" hidden tabindex="-1" aria-live="polite">
@@ -121,7 +121,7 @@
             <p id="result-remark" class="result-remark"></p>
             <ul id="result-reasons" class="result-reasons"></ul>
             <div id="result-plan" class="suggested-plan" hidden></div>
-            <p id="result-note">A result will appear only when approved executable Nobles policies are available.</p>
+            <p id="result-note">Your result will show reported cash-flow headroom and a suggested product to discuss.</p>
             <div class="cta-stack">
               <a class="primary-cta" href="https://mynoblescooperative.com/membership/">Become a Nobles Member</a>
               <a class="secondary-cta" href="https://wa.me/2349151142355">Speak With a Nobles Officer</a>

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../src/server/app.ts';
 import type { Actor } from '../src/domain/access.ts';
-import { parsePublicReadinessInput, publicReadinessAssessment, publicReadinessPolicy } from '../src/domain/public-readiness.ts';
+import { parsePublicGuidanceInput, parsePublicReadinessInput, publicFinancialGuidanceAssessment, publicReadinessAssessment, publicReadinessPolicy } from '../src/domain/public-readiness.ts';
 import { PublicReadinessRepository } from '../src/server/public-readiness.ts';
 import { publicProductCatalog, publicProductGuidance, publicPurposeCatalog } from '../src/domain/product-guidance.ts';
 import type { StaffAuthentication } from '../src/server/staff-auth.ts';
@@ -58,6 +58,16 @@ test('public guidance offers broad purposes without treating website description
   assert.equal(catalog.find(item => item.code === 'APPROVED_SPECIAL_PURPOSE')?.suggestedProductCodes.length, 0);
 });
 
+test('public financial guidance reports cash-flow headroom without claiming eligibility', () => {
+  const result = publicFinancialGuidanceAssessment(parsePublicGuidanceInput({ ...body, productCode: 'MARKETLIFT' }));
+  assert.equal(result.status, 'FINANCIAL_GUIDANCE_AVAILABLE');
+  assert.equal(result.readinessPercentage, 40);
+  assert.equal(result.estimatedEligibleAmountKobo, null);
+  assert.match(result.remark, /cash-flow headroom/);
+  assert.match(result.reasons[2], /5\.0 months/);
+  assert.doesNotMatch([result.remark, ...result.reasons].join(' '), /eligible|approval probability|policy/i);
+});
+
 test('public readiness rejects identity fields, incomplete ranges and unapproved contracts', () => {
   const policy = publicReadinessPolicy(scorePayload, eligibilityPayload);
   assert.throws(() => parsePublicReadinessInput({ ...body, bvn: 'should-never-be-accepted' }, policy), /INVALID_PUBLIC_READINESS_INPUT/);
@@ -66,7 +76,7 @@ test('public readiness rejects identity fields, incomplete ranges and unapproved
   assert.throws(() => publicReadinessPolicy({}, eligibilityPayload), /PUBLIC_READINESS_POLICY_REQUIRED/);
 });
 
-test('public repository calculates in a read-only transaction without storing answers', async () => {
+test('public repository calculates financial guidance in a read-only transaction without storing answers', async () => {
   const queries: string[] = [];
   const rows = [
     { kind: 'PRODUCT', code: 'MARKET_LIFT', payload: {
@@ -87,16 +97,21 @@ test('public repository calculates in a read-only transaction without storing an
   };
   const repository = new PublicReadinessRepository({ async connect() { return client; } } as unknown as pg.Pool);
   const configuration = await repository.configuration();
+  assert.equal(configuration.status, 'AVAILABLE');
+  assert.equal(configuration.calculationMode, 'FINANCIAL_GUIDANCE');
+  assert.equal(configuration.products.length, 4);
   assert.equal(configuration.guidanceProducts.length, 4);
   assert.ok(configuration.purposeCatalog.length >= 20);
   queries.length = 0;
-  const result = await repository.evaluate(body);
-  assert.equal(result.status, 'READY_FOR_FORMAL_REVIEW');
+  const result = await repository.evaluate({ ...body, productCode: 'MARKETLIFT' });
+  assert.equal(result.status, 'FINANCIAL_GUIDANCE_AVAILABLE');
+  assert.equal(result.readinessPercentage, 40);
   assert.equal(result.estimatedEligibleAmountKobo, null);
-  assert.equal(result.suggestedPlan?.productName, 'Market Lift');
+  assert.equal(result.suggestedPlan?.productName, 'MarketLift');
   assert.match(result.suggestedPlan?.nextStep ?? '', /formal assessment/);
   assert.equal(queries[0], 'BEGIN READ ONLY');
   assert.equal(queries.at(-1), 'COMMIT');
+  assert.ok(queries.every(query => !query.startsWith('SELECT DISTINCT ON')));
   assert.ok(queries.every(query => !/^\s*(INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP)\b/i.test(query)));
   let connects = 0;
   const unavailable = new PublicReadinessRepository({ async connect() { connects++; return client; } } as unknown as pg.Pool);
@@ -116,8 +131,8 @@ test('public route is staff-only, rate-limited and protected shells require serv
     clearCookie() {}
   } as unknown as StaffAuthentication;
   const publicReadiness = {
-    async configuration() { return { status: 'POLICY_CONFIGURATION_REQUIRED', products: [], purposeCatalog: publicPurposeCatalog(), guidanceProducts: publicProductCatalog() }; },
-    async evaluate() { return { status: 'POLICY_CONFIGURATION_REQUIRED', readinessPercentage: null, reasons: [], remark: 'Policies required.', suggestedPlan: null, estimatedEligibleAmountKobo: null }; }
+    async configuration() { return { status: 'AVAILABLE', calculationMode: 'FINANCIAL_GUIDANCE', products: [], purposeCatalog: publicPurposeCatalog(), guidanceProducts: publicProductCatalog() }; },
+    async evaluate() { return { status: 'FINANCIAL_GUIDANCE_AVAILABLE', readinessPercentage: 40, reasons: [], remark: 'Guidance available.', suggestedPlan: null, estimatedEligibleAmountKobo: null }; }
   } as unknown as PublicReadinessRepository;
   const options = { origin, surface: 'staff' as 'staff' | 'administration', staffAuth, publicReadiness };
   const server = createApp(options);

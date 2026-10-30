@@ -1,7 +1,7 @@
 const form = document.querySelector('#public-readiness-form');
 const steps = [...document.querySelectorAll('.check-step')];
 const progressItems = [...document.querySelectorAll('#check-steps li')];
-const policyStatus = document.querySelector('#policy-status');
+const readinessStatus = document.querySelector('#readiness-status');
 const formMessage = document.querySelector('#form-message');
 const previous = document.querySelector('#previous-step');
 const next = document.querySelector('#next-step');
@@ -16,7 +16,7 @@ let current = 0;
 let products = [];
 let purposeCatalog = [];
 let guidanceProducts = [];
-let policiesAvailable = false;
+let calculationAvailable = false;
 
 function showStep(index) {
   current = index;
@@ -91,15 +91,16 @@ function renderProductGuidance() {
 function updateProducts() {
   const candidates = products.filter(item => item.purposeCodes.includes(purpose.value));
   const previousValue = product.value;
-  product.replaceChildren(option('', candidates.length ? 'Select a Nobles product' : 'Suggestion shown below - calculation policy pending'));
+  product.replaceChildren(option('', candidates.length ? 'Select a suggested Nobles product' : 'No suggested product is available'));
   for (const item of candidates) product.append(option(item.code, item.name));
   if (candidates.some(item => item.code === previousValue)) product.value = previousValue;
   else if (candidates.length === 1) product.value = candidates[0].code;
   product.disabled = candidates.length === 0;
-  submit.disabled = !policiesAvailable || !product.value;
+  calculationAvailable = candidates.length > 0;
+  submit.disabled = !calculationAvailable || !product.value;
   calculationAvailability.textContent = candidates.length
-    ? 'The selected purpose has an approved product policy available for this preliminary calculation. This remains a readiness indicator, not approval.'
-    : 'The product suggestion below is guidance from Nobles public product information. A percentage cannot be calculated for this purpose until an approved executable product-purpose policy is available.';
+    ? 'The percentage shows reported monthly cash-flow headroom only. It is not loan eligibility, approval or an offer.'
+    : 'No Nobles product is currently suggested for this purpose. Speak with a Nobles officer for guidance.';
   renderPurposeGuidance();
   renderProductGuidance();
 }
@@ -115,17 +116,12 @@ async function loadConfiguration() {
     purpose.replaceChildren(option('', 'Select a purpose'));
     for (const item of purposeCatalog) purpose.append(option(item.code, item.label));
     purpose.disabled = purposeCatalog.length === 0;
-    policiesAvailable = data.status === 'AVAILABLE' && products.length > 0;
-    if (!policiesAvailable) {
-      policyStatus.textContent = 'You can explore Nobles purposes and answer the questions, but a live percentage and product plan remain unavailable until approved executable readiness policies are configured.';
-      submit.textContent = 'Calculation unavailable';
-      updateProducts();
-      return;
-    }
+    calculationAvailable = data.status === 'AVAILABLE' && products.length > 0;
     updateProducts();
-    policyStatus.textContent = 'Approved executable readiness policies are available. Your answers are used only for this calculation and are not saved.';
+    readinessStatus.textContent = 'The financial readiness guide is available. Your answers are used only for this calculation and are not saved.';
   } catch {
-    policyStatus.textContent = 'The readiness service is temporarily unavailable. No answers have been sent or saved.';
+    calculationAvailable = false;
+    readinessStatus.textContent = 'The readiness service is temporarily unavailable. No answers have been sent or saved.';
     purpose.replaceChildren(option('', 'Purpose catalogue temporarily unavailable'));
     product.replaceChildren(option('SERVICE_PENDING', 'Product selection temporarily unavailable'));
     purpose.disabled = true;
@@ -166,41 +162,29 @@ function renderResult(data) {
   reasons.replaceChildren();
   plan.replaceChildren();
   plan.hidden = true;
-  if (data.status === 'POLICY_CONFIGURATION_REQUIRED') {
-    title.textContent = 'Live calculation is not currently available';
-    score.textContent = '';
-    remark.textContent = data.remark ?? '';
-    note.textContent = 'Approved executable PRODUCT, SCORE and ELIGIBILITY policies are required before Nobles can show a readiness result.';
-  } else {
-    const titles = {
-      READY_FOR_FORMAL_REVIEW: 'You may be ready for a formal review',
-      NEEDS_ATTENTION: 'Some areas may need attention',
-      NOT_CURRENTLY_READY: 'You may not be ready yet'
-    };
-    title.textContent = titles[data.status] ?? 'Preliminary readiness result';
-    score.textContent = Number.isInteger(data.readinessPercentage) ? data.readinessPercentage + '% readiness indicator' : '';
-    remark.textContent = data.remark ?? '';
-    for (const text of Array.isArray(data.reasons) ? data.reasons : []) {
-      const item = document.createElement('li');
-      item.textContent = text;
-      reasons.append(item);
-    }
-    if (data.suggestedPlan) {
-      const heading = document.createElement('h3');
-      heading.textContent = 'Suggested Nobles plan to discuss: ' + data.suggestedPlan.productName;
-      const summary = document.createElement('p');
-      summary.textContent = data.suggestedPlan.summary;
-      const purposeText = document.createElement('p');
-      purposeText.textContent = 'Purpose: ' + data.suggestedPlan.purpose;
-      const repayment = document.createElement('p');
-      repayment.textContent = data.suggestedPlan.repaymentPattern + '. ' + data.suggestedPlan.amountGuide + '.';
-      const nextStep = document.createElement('p');
-      nextStep.textContent = data.suggestedPlan.nextStep;
-      plan.append(heading, summary, purposeText, repayment, nextStep);
-      plan.hidden = false;
-    }
-    note.textContent = 'This is not approval, an offer, a guarantee or a final eligible amount. Speak with a Nobles officer for a formal assessment.';
+  title.textContent = 'Your cash-flow readiness guide';
+  score.textContent = Number.isInteger(data.readinessPercentage) ? data.readinessPercentage + '% cash-flow readiness' : '';
+  remark.textContent = data.remark ?? '';
+  for (const text of Array.isArray(data.reasons) ? data.reasons : []) {
+    const item = document.createElement('li');
+    item.textContent = text;
+    reasons.append(item);
   }
+  if (data.suggestedPlan) {
+    const heading = document.createElement('h3');
+    heading.textContent = 'Suggested Nobles plan to discuss: ' + data.suggestedPlan.productName;
+    const summary = document.createElement('p');
+    summary.textContent = data.suggestedPlan.summary;
+    const purposeText = document.createElement('p');
+    purposeText.textContent = 'Purpose: ' + data.suggestedPlan.purpose;
+    const repayment = document.createElement('p');
+    repayment.textContent = data.suggestedPlan.repaymentPattern + '. ' + data.suggestedPlan.amountGuide + '.';
+    const nextStep = document.createElement('p');
+    nextStep.textContent = data.suggestedPlan.nextStep;
+    plan.append(heading, summary, purposeText, repayment, nextStep);
+    plan.hidden = false;
+  }
+  note.textContent = 'This percentage is the share of reported monthly income left after reported regular outgoings. It is not approval, an offer, a guarantee or a final eligible amount.';
   showStep(5);
   document.querySelector('#check-result').focus();
 }
@@ -218,7 +202,7 @@ restart.addEventListener('click', () => {
 });
 form.addEventListener('submit', async event => {
   event.preventDefault();
-  if (!policiesAvailable || !validStep(4)) return;
+  if (!calculationAvailable || !validStep(4)) return;
   submit.disabled = true;
   formMessage.textContent = 'Calculating your preliminary readiness…';
   try {
@@ -235,7 +219,7 @@ form.addEventListener('submit', async event => {
       ? 'Enter each amount in naira using no more than two decimal places.'
       : 'We could not complete the check. No answers were saved. Please try again later.';
   } finally {
-    submit.disabled = !policiesAvailable || !product.value;
+    submit.disabled = !calculationAvailable || !product.value;
   }
 });
 

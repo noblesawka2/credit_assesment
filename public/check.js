@@ -16,7 +16,6 @@ let current = 0;
 let products = [];
 let purposeCatalog = [];
 let guidanceProducts = [];
-let calculationAvailable = false;
 
 function showStep(index) {
   current = index;
@@ -29,6 +28,7 @@ function showStep(index) {
   next.hidden = index >= 4;
   submit.hidden = index !== 4;
   restart.hidden = index !== 5;
+  if (index === 4) submit.disabled = !product.value;
   formMessage.textContent = '';
   steps[index].focus?.();
 }
@@ -94,10 +94,9 @@ function updateProducts() {
   product.replaceChildren(option('', candidates.length ? 'Select a suggested Nobles product' : 'No suggested product is available'));
   for (const item of candidates) product.append(option(item.code, item.name));
   if (candidates.some(item => item.code === previousValue)) product.value = previousValue;
-  else if (candidates.length === 1) product.value = candidates[0].code;
+  else if (candidates.length > 0) product.value = candidates[0].code;
   product.disabled = candidates.length === 0;
-  calculationAvailable = candidates.length > 0;
-  submit.disabled = !calculationAvailable || !product.value;
+  submit.disabled = !product.value;
   calculationAvailability.textContent = candidates.length
     ? 'The percentage shows reported monthly cash-flow headroom only. It is not loan eligibility, approval or an offer.'
     : 'No Nobles product is currently suggested for this purpose. Speak with a Nobles officer for guidance.';
@@ -116,11 +115,9 @@ async function loadConfiguration() {
     purpose.replaceChildren(option('', 'Select a purpose'));
     for (const item of purposeCatalog) purpose.append(option(item.code, item.label));
     purpose.disabled = purposeCatalog.length === 0;
-    calculationAvailable = data.status === 'AVAILABLE' && products.length > 0;
     updateProducts();
     readinessStatus.textContent = 'The financial readiness guide is available. Your answers are used only for this calculation and are not saved.';
   } catch {
-    calculationAvailable = false;
     readinessStatus.textContent = 'The readiness service is temporarily unavailable. No answers have been sent or saved.';
     purpose.replaceChildren(option('', 'Purpose catalogue temporarily unavailable'));
     product.replaceChildren(option('SERVICE_PENDING', 'Product selection temporarily unavailable'));
@@ -194,7 +191,10 @@ next.addEventListener('click', () => {
 });
 previous.addEventListener('click', () => showStep(current - 1));
 purpose.addEventListener('change', updateProducts);
-product.addEventListener('change', renderProductGuidance);
+product.addEventListener('change', () => {
+  renderProductGuidance();
+  submit.disabled = !product.value;
+});
 restart.addEventListener('click', () => {
   form.reset();
   updateProducts();
@@ -202,7 +202,7 @@ restart.addEventListener('click', () => {
 });
 form.addEventListener('submit', async event => {
   event.preventDefault();
-  if (!calculationAvailable || !validStep(4)) return;
+  if (!validStep(4)) return;
   submit.disabled = true;
   formMessage.textContent = 'Calculating your preliminary readiness…';
   try {
@@ -219,7 +219,7 @@ form.addEventListener('submit', async event => {
       ? 'Enter each amount in naira using no more than two decimal places.'
       : 'We could not complete the check. No answers were saved. Please try again later.';
   } finally {
-    submit.disabled = !calculationAvailable || !product.value;
+    submit.disabled = !product.value;
   }
 });
 

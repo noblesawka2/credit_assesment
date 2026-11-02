@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../src/server/app.ts';
 import type { Actor } from '../src/domain/access.ts';
@@ -35,6 +36,13 @@ const body = {
   monthlyHouseholdExpensesKobo: '10000000', monthlyOtherCommitmentsKobo: '5000000',
   monthlyExistingRepaymentsKobo: '5000000', requestedAmountKobo: '100000000'
 };
+
+test('public final-step button auto-selects a suggested product and has no separate availability gate', async () => {
+  const script = await readFile(new URL('../public/check.js', import.meta.url), 'utf8');
+  assert.match(script, /else if \(candidates\.length > 0\) product\.value = candidates\[0\]\.code/);
+  assert.match(script, /if \(!validStep\(4\)\) return/);
+  assert.doesNotMatch(script, /calculationAvailable/);
+});
 
 test('public readiness uses only approved policy rules and returns no eligible amount', () => {
   const policy = publicReadinessPolicy(scorePayload, eligibilityPayload);
